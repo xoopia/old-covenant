@@ -43,7 +43,7 @@ function initDeck(characterId) {
  */
 function drawCards(state, playerId, count = 1) {
   const s = deepClone(state);
-  const player = s.players.find((p) => p.id === playerId);
+  let player = s.players.find((p) => p.id === playerId);
   if (!player || !player.isAlive) return s;
 
   for (let i = 0; i < count; i++) {
@@ -53,7 +53,6 @@ function drawCards(state, playerId, count = 1) {
         // 牌库和弃牌堆都为空 → 受到 1 点真实伤害
         const { dealDamage } = require("./gameEngine");
         const newState = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
-        // dealDamage 返回新 state，需要同步回 s
         s.players = newState.players;
         const refreshed = s.players.find(p => p.id === playerId);
         if (refreshed) {
@@ -62,8 +61,17 @@ function drawCards(state, playerId, count = 1) {
         }
         break;
       }
-      player.deck = shuffle(player.discardPile);
-      player.discardPile = [];
+      // 弃牌堆洗入牌库 → 受到 1 点真实伤害，再洗入
+      const { dealDamage } = require("./gameEngine");
+      const dmgState = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
+      s.players = dmgState.players;
+      player = s.players.find(pl => pl.id === playerId); // 刷新引用
+      if (player) {
+        s.gameLogs = s.gameLogs || [];
+        s.gameLogs.push(`🔄 ${player.character || playerId} 弃牌堆洗入牌库，受到 1 点真实伤害`);
+        player.deck = shuffle(player.discardPile);
+        player.discardPile = [];
+      }
     }
 
     const cardId = player.deck.pop();
