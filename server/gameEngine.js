@@ -118,12 +118,12 @@ function dealDamageMultiTarget(state, sourceId, targetList, damage, isTrueDamage
 // ========== 角色定义 ==========
 
 const CHARACTERS = {
-  "战士": { id: "战士", maxHp: 10, color: "#e74c3c", emoji: "⚔️" },
-  "牧师": { id: "牧师", maxHp: 10, color: "#f1c40f", emoji: "✨" },
-  "法师": { id: "法师", maxHp: 10, color: "#3498db", emoji: "🧙" },
-  "坦克": { id: "坦克", maxHp: 10, color: "#2ecc71", emoji: "🛡️" },
-  "兽人": { id: "兽人", maxHp: 10, color: "#e67e22", emoji: "🐺" },
-  "刺客": { id: "刺客", maxHp: 10, color: "#9b59b6", emoji: "🗡️" },
+  "战士": { id: "战士", maxHp: 10, color: "#b3403a", emoji: "⚔️" },
+  "牧师": { id: "牧师", maxHp: 10, color: "#c4941a", emoji: "✨" },
+  "法师": { id: "法师", maxHp: 10, color: "#3a6fa8", emoji: "🧙" },
+  "坦克": { id: "坦克", maxHp: 10, color: "#408a5c", emoji: "🛡️" },
+  "兽人": { id: "兽人", maxHp: 10, color: "#c4752a", emoji: "🐺" },
+  "刺客": { id: "刺客", maxHp: 10, color: "#7b4ea0", emoji: "🗡️" },
 };
 
 // ========== 效果处理器映射表 ==========
