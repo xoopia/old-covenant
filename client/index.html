@@ -560,17 +560,17 @@ function connectWS(){
   console.log('[WS] Connecting to', WS_URL);
   ws = new WebSocket(WS_URL);
   ws.onopen = () => {
-    console.log('[WS] ✅ Connected');
-    // 清除错误提示
+    console.log('[WS] Connected');
     document.getElementById('lobby-error').textContent = '';
-    // 连接成功后发送所有暂存消息
+    // 断线重连：如果在游戏中，自动发送RECONNECT恢复状态
+    if (myRoomCode && myPlayerId) {
+      console.log('[WS] Auto-reconnecting to room', myRoomCode);
+      send('RECONNECT', { roomCode: myRoomCode, playerId: myPlayerId });
+    }
+    // 清空暂存的消息队列（RECONNECT会重新同步完整状态，旧消息已过时）
     if (pendingMessages.length > 0) {
-      console.log('[WS] Flushing', pendingMessages.length, 'pending messages');
-      const msgs = pendingMessages;
+      console.log('[WS] Dropping', pendingMessages.length, 'stale pending messages after reconnect');
       pendingMessages = [];
-      for (const m of msgs) {
-        send(m.type, m.payload);
-      }
     }
   };
   ws.onmessage = (e) => {
