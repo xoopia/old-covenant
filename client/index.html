@@ -479,6 +479,7 @@ let playsLeft = 0;          // 当前剩余出牌次数（服务端下发）
 let autoPlayMode = false;    // 倒计时归零后自动连打模式
 let prevHand = [];            // 上一帧手牌，用于检测新抽到的牌
 let prevPlayerSnapshot = {};  // 上一帧玩家状态，用于浮动伤害数字
+let pendingFloatDiff = null; // {old, now} — 在renderBoard之后执行
 
 // ==================== 手动过牌 ====================
 function manualPassTurn(){
@@ -850,8 +851,13 @@ function handleServerMessage(msg){
       break;
 
     case 'STATE_SYNC':
-      // 浮动数字对比（在更新 gameState 之前）
-      prevPlayerSnapshot = diffAndFloat(prevPlayerSnapshot, payload) || prevPlayerSnapshot;
+      {
+      // 旧快照 = 上一次 STATE_SYNC 的状态；新快照 = 本次 payload
+      const oldSnap = prevPlayerSnapshot;
+      const newSnap = buildPlayerSnapshot(payload);
+      pendingFloatDiff = { oldSnap: oldSnap, newSnap: newSnap };
+      prevPlayerSnapshot = newSnap;
+      }
       gameState = payload;
       // 大厅阶段：刷新玩家列表
       if (gameState.phase === 'WAITING' || gameState.phase === 'ROLLING') {
@@ -1077,6 +1083,7 @@ function updateGameUI(){
 
   // 渲染面板
   renderBoard(players, currentPlayerId);
+  flushFloatDiffs();         // DOM 已就绪，开始浮动数字
   updateHandUI();
   updateActionBar();
   updateLogPanel();
@@ -1091,8 +1098,16 @@ function updateGameUI(){
 }
 
 // ==================== 浮动伤害/治疗/护盾数字 ====================
+function buildPlayerSnapshot(gs) {
+  const snap = {};
+  if (!gs || !gs.players) return snap;
+  for (const p of gs.players) {
+    snap[p.seatIndex] = { hp: p.hp, shield: p.shield || 0, greenShield: p.greenShield || 0, alive: p.isAlive };
+  }
+  return snap;
+}
+
 function spawnFloatingNum(seatIndex, text, cls) {
-  // 找到对应座位的玩家卡片
   const card = document.querySelector('.player-card[data-seat="' + seatIndex + '"]');
   if (!card) return;
   const rect = card.getBoundingClientRect();
@@ -1102,39 +1117,41 @@ function spawnFloatingNum(seatIndex, text, cls) {
   el.style.left = (rect.left + rect.width/2 - 30) + 'px';
   el.style.top = (rect.top + 4) + 'px';
   document.body.appendChild(el);
-  // 动画结束后移除
-  setTimeout(() => el.remove(), 1250);
+  setTimeout(() => el.remove(), 1300);
 }
 
-function diffAndFloat(prev, now) {
-  if (!now || !now.players) return;
-  for (const p of now.players) {
-    const seat = p.seatIndex != null ? p.seatIndex : -1;
-    const old = prev[seat] || { hp: p.hp, shield: p.shield || 0, greenShield: p.greenShield || 0 };
-    // HP变化（扣除还是回复）
-    const hpDelta = (p.hp || 0) - (old.hp || 0);
+/** 在 renderBoard 之后调用 —— DOM 已存在 */
+function flushFloatDiffs() {
+  if (!pendingFloatDiff) return;
+  const { oldSnap, newSnap } = pendingFloatDiff;
+  pendingFloatDiff = null;
+  for (const seat of Object.keys(newSnap)) {
+    const seatNum = parseInt(seat);
+    const now = newSnap[seat];
+    const old = oldSnap[seat] || { hp: now.hp, shield: now.shield || 0, greenShield: now.greenShield || 0, alive: true };
+    if (!now.alive && old.alive) {
+      spawnFloatingNum(seatNum, '💀', 'damage');
+      continue;
+    }
+    const hpDelta = (now.hp || 0) - (old.hp || 0);
     if (hpDelta < 0) {
-      spawnFloatingNum(seat, hpDelta.toString(), 'damage');
+      spawnFloatingNum(seatNum, hpDelta.toString(), 'damage');
     } else if (hpDelta > 0) {
-      spawnFloatingNum(seat, '+' + hpDelta, 'heal');
+      spawnFloatingNum(seatNum, '+' + hpDelta, 'heal');
     }
-    // 普通护盾变化
-    const sdDelta = (p.shield || 0) - (old.shield || 0);
+    const sdDelta = (now.shield || 0) - (old.shield || 0);
     if (sdDelta > 0) {
-      spawnFloatingNum(seat, '🛡️+' + sdDelta, 'shield');
+      spawnFloatingNum(seatNum, '🛡️+' + sdDelta, 'shield');
+    } else if (sdDelta < 0) {
+      spawnFloatingNum(seatNum, '🛡️' + sdDelta, 'damage');
     }
-    // 绿盾变化
-    const gsDelta = (p.greenShield || 0) - (old.greenShield || 0);
+    const gsDelta = (now.greenShield || 0) - (old.greenShield || 0);
     if (gsDelta > 0) {
-      spawnFloatingNum(seat, '🔰+' + gsDelta, 'green-shield');
+      spawnFloatingNum(seatNum, '🔰+' + gsDelta, 'green-shield');
+    } else if (gsDelta < 0) {
+      spawnFloatingNum(seatNum, '🔰' + gsDelta, 'damage');
     }
   }
-  // 更新快照
-  const snap = {};
-  for (const p of now.players) {
-    snap[p.seatIndex] = { hp: p.hp, shield: p.shield || 0, greenShield: p.greenShield || 0 };
-  }
-  return snap;
 }
 
 function renderBoard(players, currentPlayerId){
