@@ -13,17 +13,24 @@ const { CHARACTERS, createInitialGameState, resolve, resolveChain, skipChain, ch
 const { drawCards } = require("./deckManager");
 const CARDS = require("./cards.json");
 
-/** 将卡牌效果列表转为图标计数字符串，如 "🗡️x2 🛡️x1 ❤️x1" */
-function formatCardIcons(cardId) {
+/** 生成战斗日志：卡牌名 + 图标 + 目标，如 "猛击 🗡️x2 → 法师" */
+function formatCardPlayLog(cardId, gameState, targets) {
   const card = CARDS[cardId];
-  if (!card || !card.effects) return cardId;
+  if (!card) return cardId;
   const counts = {};
-  for (const e of card.effects) {
-    counts[e] = (counts[e] || 0) + 1;
-  }
-  // 按攻击→护盾→治疗→抽牌→闪电→特殊 排序
+  for (const e of (card.effects || [])) counts[e] = (counts[e] || 0) + 1;
   const order = ['🗡️','🛡️','❤️','🃏','⚡','🔰','💥','🩸','💕','♻️','⛈️','🙏','🐾','🐻','🐺','🐯','👀','🫥'];
-  return order.filter(o => counts[o]).map(o => counts[o] > 1 ? `${o}x${counts[o]}` : o).join(' ') || cardId;
+  const iconStr = order.filter(o => counts[o]).map(o => counts[o] > 1 ? `${o}x${counts[o]}` : o).join(' ') || '';
+  // 目标信息
+  let targetStr = '';
+  if (targets && targets.length > 0 && gameState) {
+    const names = targets.map(tid => {
+      const tp = (gameState.players || []).find(p => p.id === tid);
+      return tp ? tp.character : tid;
+    }).filter(Boolean);
+    if (names.length > 0) targetStr = ' → ' + names.join('、');
+  }
+  return `${card.name} ${iconStr}${targetStr}`;
 }
 const { onTurnStart, onTurnEnd } = require("./buffManager");
 
@@ -303,17 +310,15 @@ class Room {
     if (gs.awaitingChain) {
       // 连锁出牌
       this.gameState = resolveChain(gs, playerId, cardId, resolvedTargets);
-      const chainIconStr = formatCardIcons(cardId);
       this.gameState.gameLogs.push(
-        `⚡ ${player.nickname}(${player.character}) 连锁: ${chainIconStr}`
+        `⚡ ${player.character} ${formatCardPlayLog(cardId, this.gameState, resolvedTargets)}`
       );
       isChainCard = true;
     } else {
       // 正常出牌
       this.gameState = resolve(gs, playerId, cardId, resolvedTargets);
-      const iconStr = formatCardIcons(cardId);
       this.gameState.gameLogs.push(
-        `🎴 ${player.nickname}(${player.character}) → ${iconStr}`
+        `🎴 ${player.character} ${formatCardPlayLog(cardId, this.gameState, resolvedTargets)}`
       );
     }
 
@@ -468,7 +473,8 @@ class Room {
       if (!cardId) cardId = player.hand[0];
       const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
       const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
-      this.gameState.gameLogs.push(`⏩ 自动出牌: ${formatCardIcons(cardId)}`);
+      const autoTargets = enemies.length > 0 ? [enemies[0].id] : [];
+      this.gameState.gameLogs.push(`⏩ 自动 ${formatCardPlayLog(cardId, this.gameState, autoTargets)}`);
       const playRes = this.playCard(playerId, cardId, target);
       if (!playRes.success) return playRes;
       // 出牌触发了连锁 → 不自动过牌，等玩家操作
