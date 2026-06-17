@@ -44,13 +44,22 @@ function initDeck(characterId) {
 function drawCards(state, playerId, count = 1) {
   const s = deepClone(state);
   const player = s.players.find((p) => p.id === playerId);
-  if (!player) return s;
+  if (!player || !player.isAlive) return s;
 
   for (let i = 0; i < count; i++) {
     // 牌库空 → 洗弃牌堆
     if (player.deck.length === 0) {
       if (player.discardPile.length === 0) {
-        // 完全没有牌可抽，静默处理
+        // 牌库和弃牌堆都为空 → 受到 1 点真实伤害
+        const { dealDamage } = require("./gameEngine");
+        const newState = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
+        // dealDamage 返回新 state，需要同步回 s
+        s.players = newState.players;
+        const refreshed = s.players.find(p => p.id === playerId);
+        if (refreshed) {
+          s.gameLogs = s.gameLogs || [];
+          s.gameLogs.push(`📭 ${refreshed.character || playerId} 牌库耗尽，受到 1 点真实伤害`);
+        }
         break;
       }
       player.deck = shuffle(player.discardPile);
