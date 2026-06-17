@@ -80,7 +80,7 @@ body{
 #top-bar .turn-info{font-size:14px}
 
 /* ====== 游戏主区域 ====== */
-#game-screen{background:radial-gradient(ellipse at center, #1e2a3a 0%, #0a0a18 100%)}
+#game-screen{position:relative;background:radial-gradient(ellipse at center, #1e2a3a 0%, #0a0a18 100%)}
 #game-area{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
 
 /* 4人桌面十字布局 */
@@ -251,6 +251,11 @@ body{
 .pick-header{text-align:center;margin-bottom:12px}
 .pick-header h2{font-size:28px;margin-bottom:4px}
 .pick-header .pick-info{color:var(--text-dim);font-size:15px;min-height:22px}
+.pick-countdown{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;font-size:20px}
+.pick-countdown .hourglass{font-size:24px}
+.pick-countdown .cd-num{font-weight:bold;color:var(--gold);min-width:30px;text-align:center}
+.pick-countdown.urgent .cd-num{color:var(--danger);animation:cd-blink .5s infinite}
+.pick-countdown.urgent .hourglass{animation:cd-blink .5s infinite}
 .pick-layout{display:flex;gap:24px;max-width:1400px;margin:0 auto;align-items:flex-start}
 /* 左侧角色网格 */
 .char-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1}
@@ -351,6 +356,10 @@ body{
   <div class="pick-header">
     <h2>🎭 选择你的角色</h2>
     <p class="pick-info" id="pick-info">等待掷骰结果...</p>
+    <div class="pick-countdown" id="pick-countdown-box" style="display:none">
+      <span class="hourglass">⏳</span>
+      <span class="cd-num" id="pick-cd-num">60</span>
+    </div>
   </div>
   <div class="pick-layout">
     <div class="char-grid" id="char-grid"></div>
@@ -446,6 +455,8 @@ let selectedTargets = [];  // 当前选中的目标
 let isMyTurn = false;
 let countdownTimer = null;
 let countdownValue = 60;
+let pickCountdownTimer = null;
+let pickCountdownValue = 60;
 let pickingPhase = false;
 let preselectedChar = null;
 let pickOrderGlobal = [];
@@ -632,6 +643,49 @@ function rollDice(){
   send('ROLL_DICE', {playerId: myPlayerId});
 }
 
+// ==================== 选角倒计时 ====================
+function stopPickCountdown() {
+  if (pickCountdownTimer) { clearInterval(pickCountdownTimer); pickCountdownTimer = null; }
+  const box = document.getElementById('pick-countdown-box');
+  if (box) box.style.display = 'none';
+}
+
+function startPickCountdown() {
+  stopPickCountdown();
+  pickCountdownValue = 60;
+  const box = document.getElementById('pick-countdown-box');
+  const num = document.getElementById('pick-cd-num');
+  if (!box || !num) return;
+  box.style.display = 'flex';
+  box.classList.remove('urgent');
+  num.textContent = pickCountdownValue;
+  pickCountdownTimer = setInterval(() => {
+    pickCountdownValue--;
+    num.textContent = pickCountdownValue;
+    if (pickCountdownValue <= 10) box.classList.add('urgent');
+    else box.classList.remove('urgent');
+    if (pickCountdownValue <= 0) {
+      stopPickCountdown();
+      // 超时：有预选则确认，否则随机选
+      if (pickingPhase && myPlayerId) {
+        if (preselectedChar) {
+          confirmPick();
+        } else {
+          // 随机选一个未被选的角色
+          const pickedChars = (gameState?.players || []).filter(p => p.character).map(p => p.character);
+          const available = Object.keys(CHARACTERS).filter(c => !pickedChars.includes(c));
+          if (available.length > 0) {
+            const pick = available[Math.floor(Math.random() * available.length)];
+            preselectedChar = pick;
+            renderPickScreen();
+            confirmPick();
+          }
+        }
+      }
+    }
+  }, 1000);
+}
+
 // ==================== 选角 ====================
 function pickCharacter(charId){
   // 改为预选 + 确认模式：点击左侧卡片仅预览，需点确认按钮才发送
@@ -644,6 +698,7 @@ function pickCharacter(charId){
 
 function confirmPick(){
   if(!pickingPhase || !preselectedChar) return;
+  stopPickCountdown();
   document.getElementById('btn-confirm-pick').disabled = true;
   document.getElementById('btn-confirm-pick').textContent = '⏳ 发送中...';
   send('PICK_CHARACTER', {playerId: myPlayerId, characterId: preselectedChar});
@@ -829,12 +884,16 @@ function handleServerMessage(msg){
           // Everyone picked, wait for server to transition
           document.getElementById('pick-info').innerHTML = '⏳ 选角完成，等待开局...';
           pickingPhase = false;
+          stopPickCountdown();
         } else if (myPickIdx === pickedCount) {
+          const wasMyTurn = pickingPhase;
           pickingPhase = true;
           document.getElementById('pick-info').innerHTML =
             '🟢 <b>轮到你了！</b>点击角色预览 → 确认选择';
+          if (!wasMyTurn) startPickCountdown();
         } else if (myPickIdx >= 0) {
           pickingPhase = false;
+          stopPickCountdown();
           const nextPid = pickOrder[pickedCount];
           const nextP = players.find(p=>p.id===nextPid);
           document.getElementById('pick-info').innerHTML =
@@ -895,7 +954,10 @@ function handleServerMessage(msg){
       break;
 
     case 'GAME_STARTED':
+      stopPickCountdown();
       showScreen('game-screen');
+      // 延迟一帧确保 screen 已 visible，再 resize canvas
+      setTimeout(() => { if (typeof fxResize === 'function') fxResize(); }, 50);
       document.getElementById('game-room-code').textContent = myRoomCode;
       pickingPhase = false;
       selectedCardIdx = -1;
@@ -1662,16 +1724,25 @@ const FX = {
 
 function triggerEffect(charKey, cardType, x, y){
   const fx = FX[charKey]; if(!fx) return;
-  const cx = Math.max(10, Math.min(fxW-10, x||fxW/2));
-  const cy = Math.max(10, Math.min(fxH-10, y||fxH/2));
+  const w = fxW || window.innerWidth || 960;
+  const h = fxH || window.innerHeight || 540;
+  const cx = Math.max(30, Math.min(w-30, x||w/2));
+  const cy = Math.max(30, Math.min(h-30, y||h*0.5));
   if(cardType==='skill' && fx.skill) fx.skill(cx,cy);
   else fx.base(cx,cy);
 }
 
 function fxAnimate(){
   fxCtx.clearRect(0,0,fxW,fxH);
-  // Screen shake
-  if(fxScreenShake>0){let sx=(Math.random()-0.5)*fxScreenShake,sy=(Math.random()-0.5)*fxScreenShake;fxCtx.save();fxCtx.translate(sx,sy);fxScreenShake*=0.85;if(fxScreenShake<0.5)fxScreenShake=0;}
+  // Screen shake — ensure save/restore is always balanced
+  let didSave = false;
+  if(fxScreenShake>0){
+    let sx=(Math.random()-0.5)*fxScreenShake,sy=(Math.random()-0.5)*fxScreenShake;
+    fxCtx.save(); didSave = true;
+    fxCtx.translate(sx,sy);
+    fxScreenShake*=0.85;
+    if(fxScreenShake<0.5)fxScreenShake=0;
+  }
   fxCtx.shadowColor = 'rgba(255,255,255,0.3)';
   fxCtx.shadowBlur = 8;
   for(let i=fxParticles.length-1;i>=0;i--){let p=fxParticles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=p.drag;p.vy*=p.drag;p.vy+=p.gravity;p.life-=p.decay;p.size*=0.996;if(p.life<=0||p.size<0.3)fxParticles.splice(i,1);}
@@ -1683,7 +1754,7 @@ function fxAnimate(){
   fxCtx.shadowBlur=0;
   for(let f of fxFlashes){let a=Math.min(1,(f.life/f.maxLife)*2.2);let g=fxCtx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.size);g.addColorStop(0,f.color);g.addColorStop(1,'transparent');fxCtx.globalAlpha=a*0.6;fxCtx.fillStyle=g;fxCtx.beginPath();fxCtx.arc(f.x,f.y,f.size,0,Math.PI*2);fxCtx.fill();}
   fxCtx.globalAlpha=1;
-  if(fxScreenShake>0)fxCtx.restore();
+  if(didSave) fxCtx.restore();
   requestAnimationFrame(fxAnimate);
 }
 fxAnimate();
@@ -1692,8 +1763,11 @@ function playCardEffect(character, cardId){
   const fxKey = CHAR_FX_MAP[character]; if(!fxKey) return;
   const card = CARDS_LOCAL[cardId]; if(!card) return;
   const isSkill = (card.effects||[]).some(e=>SKILL_EFFECTS.has(e));
-  const cx = fxW/2 + fxRand(-160,160);
-  const cy = fxH*0.65 + fxRand(-80,80);
+  // 以游戏面板中心为特效起点
+  const board = document.getElementById('board');
+  const br = board ? board.getBoundingClientRect() : null;
+  const cx = br ? br.left + br.width/2 + fxRand(-120,120) : fxW/2 + fxRand(-160,160);
+  const cy = br ? br.top + br.height*0.4 + fxRand(-60,60) : fxH*0.65 + fxRand(-80,80);
   triggerEffect(fxKey, isSkill?'skill':'base', cx, cy);
 }
 
