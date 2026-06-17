@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>旧日圣契</title>
+<style>
+/* ====== 全局重置 ====== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --warrior:#e74c3c;--priest:#f1c40f;--mage:#3498db;--tank:#2ecc71;
+  --beastman:#e67e22;--assassin:#9b59b6;
+  --bg:#1a1a2e;--panel:#16213e;--card-bg:#0f3460;--text:#eee;--text-dim:#8899aa;
+  --gold:#ffd700;--danger:#ff4444;--success:#44ff44;--info:#4488ff;
+}
+body{
+  font-family:'Segoe UI','Microsoft YaHei',sans-serif;
+  background:var(--bg);color:var(--text);
+  width:100vw;height:100vh;overflow:hidden;
+  user-select:none;
+  display:flex;justify-content:center;align-items:center;
+}
+
+/* ====== 屏幕切换 ====== */
+.screen{display:none;width:100%;height:100%;max-width:1440px;max-height:960px}
+.screen.active{display:flex;flex-direction:column}
+
+/* ====== 大厅界面 ====== */
+#lobby-screen{
+  justify-content:center;align-items:center;
+  background:radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a15 100%);
+}
+.lobby-panel{
+  background:var(--panel);border-radius:16px;padding:40px;min-width:480px;
+  box-shadow:0 0 60px rgba(100,100,255,0.15);
+}
+.lobby-panel h2{text-align:center;font-size:28px;margin-bottom:24px}
+.lobby-panel input{
+  width:100%;padding:14px 18px;margin:8px 0;border-radius:10px;
+  border:2px solid #2a2a4a;background:#0a0a20;color:#fff;font-size:16px;
+  transition:border .2s;
+}
+.lobby-panel input:focus{border-color:var(--info);outline:none}
+.lobby-panel button{
+  width:100%;padding:14px;margin:6px 0;border-radius:10px;
+  border:none;font-size:18px;font-weight:bold;cursor:pointer;
+  transition:all .2s;
+}
+.btn-create{background:var(--success);color:#000}
+.btn-create:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(68,255,68,0.3)}
+.btn-join{background:var(--info);color:#fff}
+.btn-join:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(68,136,255,0.3)}
+.lobby-divider{text-align:center;margin:16px 0;color:var(--text-dim)}
+.lobby-error{color:var(--danger);text-align:center;margin-top:8px;min-height:24px}
+.room-code-display{
+  text-align:center;font-size:48px;letter-spacing:8px;
+  color:var(--gold);margin:12px 0 8px;font-family:monospace;
+}
+.lobby-players{margin:8px 0}
+.player-badge{
+  padding:6px 14px;border-radius:20px;font-size:13px;font-weight:bold;
+  border:2px solid #3a3a5a;white-space:nowrap;
+}
+.player-badge.host{background:rgba(255,215,0,0.1);border-color:var(--gold);color:var(--gold)}
+.player-badge.you{background:rgba(68,136,255,0.12);border-color:var(--info);color:var(--info)}
+.joined-confirm{
+  text-align:center;margin-top:8px;color:var(--success);font-size:14px;
+  padding:6px;border-radius:8px;background:rgba(68,255,68,0.08);
+  border:1px solid rgba(68,255,68,0.2);
+}
+
+/* ====== 顶部信息栏 ====== */
+#top-bar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:8px 24px;background:var(--panel);border-bottom:1px solid #2a2a4a;
+  height:50px;flex-shrink:0;
+}
+#top-bar .room-code{font-size:20px;font-weight:bold;color:var(--gold);letter-spacing:4px}
+#top-bar .phase-text{font-size:14px;color:var(--text-dim)}
+#top-bar .turn-info{font-size:14px}
+
+/* ====== 游戏主区域 ====== */
+#game-screen{background:radial-gradient(ellipse at center, #1e2a3a 0%, #0a0a18 100%)}
+#game-area{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+
+/* 4人桌面十字布局 */
+.board-inner{
+  display:flex;flex-direction:column;align-items:center;gap:18px;
+  width:100%;max-width:900px;padding:0 20px;
+}
+.board-row{display:flex;justify-content:center;gap:28px;flex-wrap:wrap}
+.board-mid-row{display:flex;align-items:center;justify-content:center;gap:80px}
+
+/* 玩家状态卡 */
+.player-card{
+  background:var(--panel);border-radius:12px;padding:10px 16px;
+  border:2px solid #2a2a4a;width:210px;transition:all .3s;
+}
+.player-card.current-turn{border-color:var(--gold);box-shadow:0 0 20px rgba(255,215,0,0.3)}
+.player-card.dead{opacity:0.4;filter:grayscale(0.8)}
+.player-card.disconnected{border-color:#ff4444}
+.player-card .char-icon{font-size:28px;margin-right:8px}
+.player-card .name{font-weight:bold;font-size:15px}
+.player-card .hp-bar{
+  height:8px;background:#333;border-radius:4px;margin:6px 0;overflow:hidden;
+}
+.player-card .hp-fill{height:100%;border-radius:4px;transition:width .5s}
+.player-card .buffs{font-size:18px;margin-top:4px}
+.player-card .beast-badge{
+  display:inline-block;padding:2px 8px;border-radius:6px;
+  font-size:12px;margin-top:4px;
+}
+.player-card.targetable{cursor:pointer;border-color:var(--danger)}
+.player-card.targetable:hover{box-shadow:0 0 16px rgba(255,68,68,0.5)}
+
+/* 手牌区域 */
+#hand-area{
+  display:flex;justify-content:center;align-items:flex-end;gap:6px;
+  padding:10px 0;min-height:170px;flex-shrink:0;
+}
+.card{
+  width:100px;height:145px;border-radius:12px;
+  background:var(--card-bg);border:2px solid #3a3a5a;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;position:relative;overflow:hidden;
+  flex-shrink:0;
+}
+.card:hover{width:120px;height:170px;border-color:var(--gold);z-index:10}
+.card.selected{transform:translateY(-26px);border-color:var(--info);box-shadow:0 0 24px rgba(68,136,255,0.6)}
+.card.unplayable{opacity:0.5;cursor:not-allowed}
+.card .card-name{font-size:12px;font-weight:bold;margin-bottom:5px;text-align:center}
+.card .card-icons{font-size:22px;display:flex;flex-wrap:wrap;justify-content:center;gap:2px}
+.card .card-desc{font-size:10px;color:var(--text-dim);margin-top:5px;text-align:center;padding:0 4px}
+.card .card-char-tag{font-size:10px;opacity:0.7;position:absolute;top:4px;right:6px}
+
+/* 牌库 & 弃牌堆面板 */
+#deck-display{display:flex;align-items:center;gap:10px;margin:0 16px}
+.deck-stack,.discard-stack{
+  width:60px;height:85px;border-radius:8px;border:2px solid #3a3a5a;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;position:relative;
+  background:var(--card-bg);font-size:12px;color:var(--text-dim);
+}
+.deck-stack:hover{border-color:var(--info)}
+.discard-stack:hover{border-color:var(--gold)}
+.deck-stack .stack-label,.discard-stack .stack-label{font-size:10px;margin-top:2px}
+.deck-stack .stack-count,.discard-stack .stack-count{font-size:18px;font-weight:bold}
+
+/* 弃牌堆查看弹窗 */
+.discard-modal-content{
+  background:var(--panel);border-radius:16px;padding:24px;max-width:700px;
+  max-height:500px;overflow-y:auto;
+}
+.discard-modal-content h3{font-size:20px;margin-bottom:16px;text-align:center}
+.discard-list{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.discard-mini-card{
+  width:72px;height:100px;border-radius:8px;border:1px solid #3a3a5a;
+  background:var(--card-bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-size:10px;text-align:center;
+}
+.discard-mini-card .mini-name{font-size:9px;font-weight:bold;margin-bottom:2px}
+.discard-mini-card .mini-icons{font-size:14px}
+
+/* 换牌选择器 */
+#gift-picker{display:none;text-align:center;padding:12px 0}
+#gift-picker.show{display:block}
+#gift-picker h4{color:var(--gold);margin-bottom:8px}
+#gift-picker .gift-cards{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+#gift-picker .gift-card{
+  width:80px;height:112px;border-radius:10px;border:2px solid #3a3a5a;
+  background:var(--card-bg);cursor:pointer;transition:all .2s;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+#gift-picker .gift-card:hover{border-color:var(--danger);transform:translateY(-6px);box-shadow:0 0 20px rgba(255,68,68,0.4)}
+
+/* 底部操作栏 */
+#action-bar{
+  display:flex;justify-content:center;align-items:center;gap:14px;
+  padding:10px 24px;background:var(--panel);border-top:1px solid #2a2a4a;
+  height:56px;flex-shrink:0;position:relative;z-index:10;
+}
+#action-bar button{
+  padding:8px 28px;border-radius:10px;border:none;
+  font-size:15px;font-weight:bold;cursor:pointer;transition:all .2s;
+}
+.btn-play-card{background:var(--success);color:#000;min-width:100px}
+.btn-play-card:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(68,255,68,0.3)}
+.btn-play-card:disabled{opacity:0.35;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-pass-turn{background:#555;color:var(--text-dim);min-width:90px;transition:all .3s}
+.btn-pass-turn:hover:not(:disabled){background:#e67e22;color:#fff;transform:translateY(-2px)}
+.btn-pass-turn.active{background:#e67e22;color:#fff}
+.btn-pass-turn.active:hover{background:#f39c12;box-shadow:0 4px 20px rgba(230,126,34,0.4)}
+.btn-pass-turn:disabled{opacity:0.25;cursor:not-allowed;transform:none}
+.btn-chain-skip{background:#ff9800;color:#000}
+.btn-chain-cont{background:var(--info);color:#fff}
+
+/* 小时钟倒计时 */
+#countdown-box{display:flex;align-items:center;gap:6px;min-width:90px;justify-content:center}
+#countdown-box .hourglass{font-size:22px}
+#countdown-box .cd-num{font-size:22px;font-weight:bold;color:var(--gold);min-width:36px;text-align:center}
+#countdown-box.urgent .cd-num{color:var(--danger);animation:cd-blink .5s infinite}
+#countdown-box.urgent .hourglass{animation:cd-blink .5s infinite}
+@keyframes cd-blink{50%{opacity:0.3}}
+
+/* ====== 特效画布 ====== */
+#fx-canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}
+
+/* 战斗日志 */
+#log-panel{
+  width:240px;max-height:180px;overflow-y:auto;overflow-x:hidden;
+  background:rgba(0,0,0,0.65);border-radius:10px;padding:8px 10px;
+  font-size:11px;color:var(--text-dim);flex-shrink:0;
+  position:absolute;left:10px;bottom:10px;z-index:6;
+}
+#log-panel .log-entry{margin:2px 0;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+
+/* 图标含义图例 */
+#icon-legend{
+  position:absolute;top:10px;right:10px;
+  width:210px;background:rgba(0,0,0,0.8);border-radius:8px;padding:8px 10px;
+  font-size:10px;color:var(--text-dim);z-index:6;max-height:280px;overflow-y:auto;
+  border:1px solid #2a2a4a;transition:opacity .3s;
+}
+#icon-legend .legend-title{font-size:11px;font-weight:bold;color:var(--gold);margin-bottom:6px;text-align:center}
+#icon-legend .legend-row{display:flex;align-items:center;gap:4px;margin:2px 0;padding:1px 0}
+#icon-legend .legend-icon{font-size:14px;width:20px;text-align:center;flex-shrink:0}
+#icon-legend .legend-desc{flex:1;line-height:1.3}
+#icon-legend .legend-divider{border-top:1px solid #2a2a4a;margin:4px 0;text-align:center;font-size:9px;color:#555;padding-top:2px}
+
+/* 弹窗/遮罩 */
+.modal-overlay{
+  display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.7);z-index:100;justify-content:center;align-items:center;
+}
+.modal-overlay.show{display:flex}
+.modal-box{
+  background:var(--panel);border-radius:16px;padding:32px;
+  max-width:600px;text-align:center;box-shadow:0 0 80px rgba(0,0,0,0.5);
+}
+.modal-box h2{font-size:26px;margin-bottom:16px}
+.modal-box button{
+  padding:12px 32px;margin:6px;border-radius:10px;border:none;
+  font-size:16px;font-weight:bold;cursor:pointer;
+}
+
+/* ====== 选角界面 ====== */
+#pick-screen{
+  background:radial-gradient(ellipse at center, #1e2a3a 0%, #0a0a18 100%);
+  padding:20px 30px;overflow-y:auto;
+}
+.pick-header{text-align:center;margin-bottom:12px}
+.pick-header h2{font-size:28px;margin-bottom:4px}
+.pick-header .pick-info{color:var(--text-dim);font-size:15px;min-height:22px}
+.pick-layout{display:flex;gap:24px;max-width:1400px;margin:0 auto;align-items:flex-start}
+/* 左侧角色网格 */
+.char-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;flex:1}
+.char-card{
+  padding:14px;border-radius:14px;border:3px solid #2a2a4a;
+  text-align:center;cursor:pointer;transition:all .2s;
+  background:var(--panel);position:relative;
+}
+.char-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.char-card.selected{border-color:var(--gold);box-shadow:0 0 20px rgba(255,215,0,0.3);transform:translateY(-4px)}
+.char-card.picked{opacity:0.35;cursor:not-allowed;transform:none}
+.char-card.picked:hover{transform:none;box-shadow:none}
+.char-card .char-emoji{font-size:52px;margin-bottom:6px;display:block}
+.char-card .char-name{font-weight:bold;font-size:17px;margin-bottom:2px}
+.char-card .char-title{font-size:11px;color:var(--text-dim);margin-bottom:4px}
+.char-card .char-hp{font-size:11px;color:var(--text-dim)}
+.char-card .picked-badge{
+  position:absolute;top:8px;right:10px;background:var(--danger);color:#fff;
+  font-size:10px;padding:2px 8px;border-radius:8px
+}
+/* 右侧详情面板 */
+.pick-detail{
+  width:360px;flex-shrink:0;background:var(--panel);
+  border-radius:16px;padding:24px;border:2px solid #2a2a4a;
+  position:sticky;top:20px;min-height:400px;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+}
+.pick-detail .placeholder{color:var(--text-dim);font-size:15px;text-align:center;line-height:2}
+.pick-detail .preview-emoji{font-size:96px;display:block;margin-bottom:8px}
+.pick-detail .preview-name{font-size:26px;font-weight:bold;margin-bottom:2px}
+.pick-detail .preview-title{font-size:14px;color:var(--text-dim);margin-bottom:12px}
+.pick-detail .preview-desc{font-size:13px;color:#ccc;text-align:center;line-height:1.6;margin-bottom:16px}
+.pick-detail .preview-skills{width:100%}
+.pick-detail .preview-skills h4{font-size:13px;color:var(--gold);margin-bottom:6px}
+.pick-detail .skill-item{
+  font-size:12px;padding:6px 10px;margin:4px 0;border-radius:8px;
+  background:rgba(0,0,0,0.25);line-height:1.5
+}
+.pick-detail .preview-cards{width:100%;margin-top:12px}
+.pick-detail .preview-cards h4{font-size:13px;color:var(--gold);margin-bottom:4px}
+.pick-detail .cards-text{font-size:11px;color:var(--text-dim);line-height:1.5}
+.btn-confirm{
+  width:100%;margin-top:16px;padding:14px;border-radius:12px;border:none;
+  font-size:18px;font-weight:bold;cursor:pointer;transition:all .2s;
+  background:var(--gold);color:#000;
+}
+.btn-confirm:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(255,215,0,0.4)}
+.btn-confirm:disabled{opacity:0.3;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* 掷骰动画 */
+.dice-result{
+  font-size:60px;animation:diceRoll .6s ease-out;
+}
+@keyframes diceRoll{0%{transform:rotate(0) scale(0)}50%{transform:rotate(360deg) scale(1.5)}100%{transform:rotate(720deg) scale(1)}}
+
+/* 连锁弹窗 */
+#chain-modal .modal-box{min-width:400px}
+#chain-modal .chain-timer{font-size:48px;color:var(--danger);margin:16px 0}
+
+/* 胜利弹窗 */
+.winner-char{font-size:80px;margin:16px 0}
+.winner-text{font-size:36px;color:var(--gold);font-weight:bold}
+
+/* 提示 */
+.tooltip{
+  position:fixed;background:rgba(0,0,0,0.9);color:#fff;padding:8px 14px;
+  border-radius:8px;font-size:13px;pointer-events:none;z-index:200;
+}
+</style>
+</head>
+<body>
+
+<!-- ====== 大厅界面 ====== -->
+<div id="lobby-screen" class="screen active">
+  <div class="lobby-panel">
+    <h2>📜 旧日圣契</h2>
+    <input id="nickname-input" type="text" placeholder="输入昵称" maxlength="12" value="Player">
+    <button class="btn-create" onclick="createRoom()">🏠 创建房间</button>
+    <div class="lobby-divider">—— 或 ——</div>
+    <input id="room-code-input" type="text" placeholder="输入4位房间码" maxlength="4" style="text-transform:uppercase">
+    <button class="btn-join" onclick="joinRoom()">🚪 加入房间</button>
+    <p class="lobby-error" id="lobby-error"></p>
+    <div id="my-room-info" style="display:none">
+      <p style="color:var(--text-dim)">你的房间码：</p>
+      <div class="room-code-display" id="room-code-display"></div>
+      <div class="lobby-players" id="lobby-players">
+        <p style="color:var(--text-dim);font-size:13px;margin-bottom:4px">👥 已加入玩家：</p>
+        <div id="lobby-player-list" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>
+      </div>
+      <p style="color:var(--text-dim);font-size:13px;margin-top:8px" id="lobby-hint">等待其他玩家加入 (2-4人)...</p>
+      <button class="btn-create" onclick="rollDice()" id="btn-roll-dice" style="display:none">🎲 掷骰开局 (至少2人)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 选角界面 ====== -->
+<div id="pick-screen" class="screen">
+  <div class="pick-header">
+    <h2>🎭 选择你的角色</h2>
+    <p class="pick-info" id="pick-info">等待掷骰结果...</p>
+  </div>
+  <div class="pick-layout">
+    <div class="char-grid" id="char-grid"></div>
+    <div class="pick-detail" id="pick-detail">
+      <span class="placeholder">👈<br>点击左侧角色预览详情<br><small>选择后点击下方确认</small></span>
+    </div>
+  </div>
+  <div style="text-align:center;max-width:300px;margin:12px auto 0">
+    <button class="btn-confirm" id="btn-confirm-pick" disabled onclick="confirmPick()">✅ 确认选择</button>
+  </div>
+</div>
+
+<!-- ====== 游戏界面 ====== -->
+<div id="game-screen" class="screen">
+  <canvas id="fx-canvas"></canvas>
+  <div id="top-bar">
+    <span class="room-code" id="game-room-code"></span>
+    <span class="phase-text" id="phase-text"></span>
+    <span class="turn-info" id="turn-info"></span>
+  </div>
+  <div id="game-area">
+    <div class="board" id="board"></div>
+    <div id="log-panel"></div>
+    <div id="icon-legend"></div>
+  </div>
+  <div id="hand-area"></div>
+  <div id="gift-picker">
+    <h4>👀 点击偷取 | 再选归还</h4>
+    <div class="gift-cards" id="gift-cards"></div>
+  </div>
+  <div id="action-bar">
+    <div id="deck-display">
+      <div class="deck-stack" title="牌库（不可查看）">
+        <span class="stack-count" id="deck-count">0</span>
+        <span class="stack-label">📚 牌库</span>
+      </div>
+      <div class="discard-stack" onclick="showDiscardPile()" title="点击查看弃牌堆">
+        <span class="stack-count" id="discard-count">0</span>
+        <span class="stack-label">🗑️ 弃牌</span>
+      </div>
+    </div>
+    <button class="btn-play-card" id="btn-play-card" disabled onclick="confirmPlayCard()">🎴 出牌</button>
+    <span id="playable-badge" style="display:none;font-size:14px;font-weight:bold;color:var(--gold);gap:4px;align-items:center;background:#ffd70015;padding:4px 10px;border-radius:12px">
+      🎴<span id="playable-count">1</span>
+    </span>
+    <button class="btn-pass-turn" id="btn-pass-turn" onclick="manualPassTurn()">⏩ 过牌</button>
+    <span id="countdown-box">
+      <span class="hourglass">⏳</span>
+      <span class="cd-num" id="cd-num">60</span>
+    </span>
+    <span id="action-hint" style="color:var(--text-dim);font-size:14px"></span>
+  </div>
+  <!-- 弃牌堆查看弹窗 -->
+  <div class="modal-overlay" id="discard-modal">
+    <div class="discard-modal-content">
+      <h3>🗑️ 弃牌堆</h3>
+      <div class="discard-list" id="discard-list"></div>
+      <button style="margin-top:16px;padding:10px 32px;border-radius:10px;border:none;font-size:15px;font-weight:bold;cursor:pointer;background:#555;color:#fff" onclick="closeDiscardPile()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== 连锁弹窗 ====== -->
+<div class="modal-overlay" id="chain-modal">
+  <div class="modal-box">
+    <h2>⚡ 闪电连锁！</h2>
+    <p>你可以再出一张牌</p>
+    <div class="chain-timer" id="chain-timer">15</div>
+    <button class="btn-chain-cont" onclick="chainContinue(true)">⚡ 继续出牌</button>
+    <button class="btn-chain-skip" onclick="chainContinue(false)">⏭️ 跳过</button>
+  </div>
+</div>
+
+<!-- ====== 胜利弹窗 ====== -->
+<div class="modal-overlay" id="win-modal">
+  <div class="modal-box" id="win-content"></div>
+</div>
+
+<script src="cards_data.js"></script>
+<script>
+// ==================== 全局状态 ====================
+const WS_URL = location.protocol === 'https:'
+  ? `wss://${location.host}`
+  : `ws://${location.hostname}:3000`;
+let ws = null;
+let myPlayerId = null;
+let myRoomCode = null;
+let mySeatIndex = -1;
+let gameState = null;      // 服务端下发的公共状态
+let myHand = [];           // 私有手牌
+let selectedCardIdx = -1;  // 当前选中的手牌下标
+let selectedTargets = [];  // 当前选中的目标
+let isMyTurn = false;
+let countdownTimer = null;
+let countdownValue = 60;
+let pickingPhase = false;
+let preselectedChar = null;
+let pickOrderGlobal = [];
+let myDiscardPile = [];     // 我的弃牌堆
+let myDeckCount = 0;        // 我的牌库剩余数
+let peekedHand = null;      // 刺客窥视：对手手牌
+let peekTargetId = null;    // 刺客窥视：对手ID
+let playsLeft = 0;          // 当前剩余出牌次数（服务端下发）
+
+// ==================== 手动过牌 ====================
+function manualPassTurn(){
+  selectedCardIdx = -1;
+  selectedTargets = [];
+  send('END_TURN', {playerId: myPlayerId});
+  sfxPass();
+  updateHandUI();
+  updateActionBar();
+}
+
+document.addEventListener('keydown', function(e){
+  if(e.key === ' ' || e.code === 'Space'){
+    e.preventDefault();
+    manualPassTurn();
+  }
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    confirmPlayCard();
+  }
+});
+
+// CARDS_LOCAL 由 cards_data.js 外部加载
+
+const CHARACTERS = {
+  "战士":{
+    maxHp:10, color:"#e74c3c", emoji:"⚔️",
+    title:"重装战士",
+    desc:"攻守兼备的近战专家，擅长持续的盾牌格挡与蛮力输出。",
+    skills:["🩸 血怒：回合结束时对所有敌人造成1点伤害"],
+    cards:"代表卡牌：猛击🗡️🗡️ / 护盾🛡️🛡️ / 狂风斩🗡️🗡️🗡️⚡ / 血怒🩸⚡⚡"
+  },
+  "牧师":{
+    maxHp:10, color:"#f1c40f", emoji:"✨",
+    title:"神圣牧师",
+    desc:"团队续航核心，治疗、增益、血量交换，扭转战局的关键角色。",
+    skills:["💕 生命祝福：永久提升血量上限+1","♻️ 生命交换：与一名玩家互换当前血量"],
+    cards:"代表卡牌：惩戒🗡️🗡️ / 灵感🃏🃏🃏 / 神圣新星❤️❤️❤️⚡ / 生命交换♻️"
+  },
+  "法师":{
+    maxHp:10, color:"#3498db", emoji:"🧙",
+    title:"奥术法师",
+    desc:"远程控场大师，诅咒与连锁是他的代名词，擅长制造持续伤害。",
+    skills:["⛈️ 雷暴诅咒：使目标回合结束时受到1点伤害","🙏 祈祷：回合结束时抽1张牌"],
+    cards:"代表卡牌：冰刺🗡️🗡️ / 连锁闪电⚡⚡ / 雷暴诅咒⛈️⚡ / 祈祷🙏⚡"
+  },
+  "坦克":{
+    maxHp:10, color:"#2ecc71", emoji:"🛡️",
+    title:"钢铁坦克",
+    desc:"团队之盾，超高护盾值与反伤机制，保护队友吸收伤害。",
+    skills:["💥 破盾波：清除全场敌人的普通护盾","🔰 荆棘装甲：获得反伤绿盾，受伤时反弹1点真实伤害"],
+    cards:"代表卡牌：重击🗡️🗡️ / 钢铁壁垒🛡️🛡️🛡️ / 破盾波💥 / 荆棘装甲🔰🔰🔰"
+  },
+  "兽人":{
+    maxHp:10, color:"#e67e22", emoji:"🐺",
+    title:"变形兽人",
+    desc:"唯一的变身角色，可在熊🐻/狼🐺/虎🐯三种形态间切换，每种形态有不同的被动效果。",
+    skills:["🐻 熊形态：回合开始+2护盾，回合结束对邻位造成1点伤害","🐺 狼形态：下次攻击额外+1伤害，回合结束对邻位造成1点伤害","🐯 虎形态：回合开始抽1张牌，回合结束对邻位造成1点伤害"],
+    cards:"代表卡牌：狂暴打击🗡️🗡️🐾 / 熊之坚韧❤️❤️🐻 / 狼之突袭🗡️⚡🐺 / 虎之咆哮🐯🐾⚡"
+  },
+  "刺客":{
+    maxHp:10, color:"#9b59b6", emoji:"🗡️",
+    title:"暗影刺客",
+    desc:"高爆发刺客，隐身免疫伤害、偷看并交换对手手牌。",
+    skills:["🫥 隐身：直到下回合开始完全免疫所有伤害","👀 窥视：查看并交换一名玩家的全部手牌"],
+    cards:"代表卡牌：暗杀🗡️🗡️ / 终结技🗡️🗡️🗡️🗡️ / 窥视👀 / 相位偏移🫥"
+  }
+};
+
+const CHAR_COLORS = {
+  "战士":"#e74c3c","牧师":"#f1c40f","法师":"#3498db",
+  "坦克":"#2ecc71","兽人":"#e67e22","刺客":"#9b59b6"
+};
+
+// ==================== WebSocket ====================
+function connectWS(){
+  ws = new WebSocket(WS_URL);
+  ws.onopen = () => { console.log("WS connected"); };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleServerMessage(msg);
+  };
+  ws.onclose = () => {
+    console.log("WS disconnected, retrying in 2s...");
+    setTimeout(connectWS, 2000);
+  };
+  ws.onerror = (err) => { console.error("WS error", err); };
+}
+
+function send(type, payload={}){
+  if(ws && ws.readyState === WebSocket.OPEN){
+    ws.send(JSON.stringify({type, timestamp: Date.now(), payload}));
+  }
+}
+
+// ==================== 大厅操作 ====================
+function renderLobbyPlayers(players){
+  const list = document.getElementById('lobby-player-list');
+  if(!list) return;
+  list.innerHTML = (players||[]).map((p,i)=>{
+    let cls = 'player-badge';
+    if(p.id === myPlayerId) cls += ' you';
+    if(i === 0) cls += ' host';
+    const label = p.id === myPlayerId ? '👤 你' : `👤 玩家${i+1}`;
+    const host = i === 0 ? ' 🏠' : '';
+    return `<span class="${cls}">${label}${host}</span>`;
+  }).join('');
+}
+
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showError(msg){
+  document.getElementById('lobby-error').textContent = msg;
+  setTimeout(()=>{document.getElementById('lobby-error').textContent='';},4000);
+}
+
+function createRoom(){
+  const nick = document.getElementById('nickname-input').value.trim() || 'Player';
+  send('CREATE_ROOM', {nickname: nick});
+}
+
+function joinRoom(){
+  const code = document.getElementById('room-code-input').value.trim().toUpperCase();
+  const nick = document.getElementById('nickname-input').value.trim() || 'Player';
+  if(!code || code.length!==4){showError('请输入4位房间码');return;}
+  send('JOIN_ROOM', {roomCode: code, nickname: nick});
+}
+
+function rollDice(){
+  if(!myPlayerId || !myRoomCode) return;
+  send('ROLL_DICE', {playerId: myPlayerId});
+}
+
+// ==================== 选角 ====================
+function pickCharacter(charId){
+  // 改为预选 + 确认模式：点击左侧卡片仅预览，需点确认按钮才发送
+  if(!pickingPhase) return;
+  preselectedChar = charId;
+  renderPickScreen();
+  updatePickDetail(charId);
+  document.getElementById('btn-confirm-pick').disabled = false;
+}
+
+function confirmPick(){
+  if(!pickingPhase || !preselectedChar) return;
+  document.getElementById('btn-confirm-pick').disabled = true;
+  document.getElementById('btn-confirm-pick').textContent = '⏳ 发送中...';
+  send('PICK_CHARACTER', {playerId: myPlayerId, characterId: preselectedChar});
+  preselectedChar = null;
+  pickingPhase = false;
+}
+
+function updatePickDetail(charName){
+  const detail = document.getElementById('pick-detail');
+  const info = CHARACTERS[charName];
+  if(!info) return;
+  const color = CHAR_COLORS[charName] || '#888';
+  detail.innerHTML = `
+    <span class="preview-emoji">${info.emoji}</span>
+    <div class="preview-name" style="color:${color}">${charName}</div>
+    <div class="preview-title">${info.title}</div>
+    <div class="preview-desc">${info.desc}</div>
+    <div class="preview-skills">
+      <h4>🃏 特色技能</h4>
+      ${info.skills.map(s=>`<div class="skill-item">${s}</div>`).join('')}
+    </div>
+    <div class="preview-cards">
+      <h4>🎴 ${info.cards}</h4>
+    </div>
+  `;
+}
+
+function renderPickScreen(pickOrder, rolls){
+  const grid = document.getElementById('char-grid');
+  const pickedChars = (gameState?.players||[]).filter(p=>p.character).map(p=>p.character);
+  grid.innerHTML = Object.entries(CHARACTERS).map(([name,info])=>{
+    const picked = pickedChars.includes(name);
+    const selected = preselectedChar === name;
+    return `<div class="char-card${picked?' picked':''}${selected?' selected':''}"
+         style="border-color:${selected?info.color:(picked?'#333':info.color+'66')}"
+         onclick="${picked?`event.stopPropagation()`:`pickCharacter('${name}')`}">
+      ${picked?'<span class="picked-badge">已选</span>':''}
+      <span class="char-emoji">${info.emoji}</span>
+      <div class="char-name" style="color:${info.color}">${name}</div>
+      <div class="char-title">${info.title}</div>
+      <div class="char-hp">❤️ HP: ${info.maxHp}</div>
+    </div>`;
+  }).join('');
+
+  // 重置确认按钮
+  const btn = document.getElementById('btn-confirm-pick');
+  btn.disabled = true;
+  btn.textContent = '✅ 确认选择';
+
+  // 如果没有预选角色，显示占位提示
+  if(!preselectedChar){
+    document.getElementById('pick-detail').innerHTML =
+      '<span class="placeholder">👈<br>点击左侧角色预览详情<br><small>选择后点击下方确认</small></span>';
+  }
+}
+
+function updatePickScreen(payload){
+  // 别人选了角色，刷新网格
+  if(payload.characterId){
+    preselectedChar = null;
+    renderPickScreen();
+  }
+}
+
+// ==================== 游戏操作 ====================
+function doPlayCard(cardIdx, targets){
+  const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
+  if(!isMyTurn && !isMyChain) return;
+  const cardId = myHand[cardIdx];
+  if(!cardId) return;
+
+  // 触发打出特效 + 音效
+  const me = (gameState?.players||[]).find(p=>p.id===myPlayerId);
+  if(me && me.character){
+    const fxKey = CHAR_FX_MAP[me.character]||'warrior';
+    const card = CARDS_LOCAL[cardId];
+    const isSkill = card && (card.effects||[]).some(e=>SKILL_EFFECTS.has(e));
+    playCardEffect(me.character, cardId);
+    sfxCardPlay(fxKey, isSkill);
+  }
+
+  if(isMyChain){
+    send('CHAIN_CONTINUE', {
+      playerId: myPlayerId,
+      continue: true,
+      cardId: cardId,
+      targets: targets || []
+    });
+  } else {
+    send('PLAY_CARD', {
+      playerId: myPlayerId,
+      cardId: cardId,
+      targets: targets || []
+    });
+  }
+  // playsLeft 由 STATE_SYNC 权威更新，客户端不自行修改
+}
+
+function endTurn(){
+  send('END_TURN', {playerId: myPlayerId});
+}
+
+function chainContinue(wantContinue){
+  // 跳过连锁
+  document.getElementById('chain-modal').classList.remove('show');
+  send('CHAIN_CONTINUE', { playerId: myPlayerId, continue: false });
+  selectedCardIdx = -1;
+  selectedTargets = [];
+}
+
+// ==================== 服务端消息处理 ====================
+function handleServerMessage(msg){
+  const {type, payload} = msg;
+  switch(type){
+    case 'ROOM_CREATED':
+      myPlayerId = payload.playerId;
+      myRoomCode = payload.roomCode;
+      mySeatIndex = payload.seatIndex;
+      document.getElementById('room-code-display').textContent = myRoomCode;
+      document.getElementById('my-room-info').style.display = 'block';
+      document.getElementById('btn-roll-dice').style.display = (mySeatIndex===0)?'block':'none';
+      document.getElementById('btn-roll-dice').disabled = true;
+      document.getElementById('lobby-hint').textContent = '等待其他玩家加入 (至少2人)...';
+      // Render initial player slot (host = self)
+      renderLobbyPlayers([{id:myPlayerId,nickname:(document.getElementById('nickname-input').value.trim()||'Player'),seatIndex:0}]);
+      break;
+
+    case 'JOINED':
+      myPlayerId = payload.playerId;
+      myRoomCode = payload.roomCode;
+      mySeatIndex = payload.seatIndex;
+      document.getElementById('room-code-display').textContent = myRoomCode;
+      document.getElementById('my-room-info').style.display = 'block';
+      document.getElementById('btn-roll-dice').style.display = 'none';
+      document.getElementById('lobby-hint').textContent = '✅ 成功加入房间，等待房主开局...';
+      break;
+
+    case 'STATE_SYNC':
+      gameState = payload;
+      // 大厅阶段：刷新玩家列表
+      if (gameState.phase === 'WAITING' || gameState.phase === 'ROLLING') {
+        if(gameState.players) renderLobbyPlayers(gameState.players);
+        // 房主：足够人数后启用掷骰按钮
+        const isHost = mySeatIndex === 0;
+        if(isHost && gameState.phase === 'WAITING'){
+          const aliveCount = (gameState.players||[]).length;
+          const btn = document.getElementById('btn-roll-dice');
+          btn.disabled = aliveCount < 2;
+          btn.textContent = aliveCount < 2
+            ? '🎲 等待玩家加入...'
+            : `🎲 掷骰开局 (${aliveCount}人)`;
+          document.getElementById('lobby-hint').textContent =
+            aliveCount < 2 ? '等待其他玩家加入 (至少2人)...'
+            : `已有 ${aliveCount} 名玩家，可以开局！`;
+        }
+      }
+      // 游戏阶段 → 游戏界面
+      if (gameState.phase === 'PLAYING' || gameState.phase === 'DEALING') {
+        if (!document.getElementById('game-screen').classList.contains('active')) {
+          showScreen('game-screen');
+        }
+        // 更新牌库/弃牌计数
+        const me = (gameState.players||[]).find(p=>p.id===myPlayerId);
+        if(me){
+          myDeckCount = me.deckCount || 0;
+          document.getElementById('deck-count').textContent = myDeckCount;
+          document.getElementById('discard-count').textContent = me.discardCount || 0;
+        }
+        updateGameUI();
+              } else if (gameState.phase === 'PICKING') {
+        if (!document.getElementById('pick-screen').classList.contains('active')) {
+          showScreen('pick-screen');
+        }
+        // Use server-provided pickOrder, fallback to global
+        const pickOrder = (gameState.pickOrder && gameState.pickOrder.length > 0) ? gameState.pickOrder : pickOrderGlobal;
+        if(pickOrder && pickOrder.length > 0) pickOrderGlobal = pickOrder;
+        const players = gameState.players || [];
+        const myPickIdx = pickOrder.indexOf(myPlayerId);
+        const pickedCount = players.filter(p=>p.character).length;
+        const allPicked = pickedCount >= players.length;
+        if(allPicked){
+          // Everyone picked, wait for server to transition
+          document.getElementById('pick-info').innerHTML = '⏳ 选角完成，等待开局...';
+          pickingPhase = false;
+        } else if (myPickIdx === pickedCount) {
+          pickingPhase = true;
+          document.getElementById('pick-info').innerHTML =
+            '🟢 <b>轮到你了！</b>点击角色预览 → 确认选择';
+        } else if (myPickIdx >= 0) {
+          pickingPhase = false;
+          const nextPid = pickOrder[pickedCount];
+          const nextP = players.find(p=>p.id===nextPid);
+          document.getElementById('pick-info').innerHTML =
+            `⏳ 等待 <b>${nextP?.character||nextP?.nickname||'?'}</b> 选角中...`;
+        }
+        renderPickScreen(pickOrder, []);
+      }
+      break;
+
+    case 'YOUR_HAND':
+      myHand = payload.hand || [];
+      myDiscardPile = payload.discardPile || [];
+      myDeckCount = payload.deckCount || 0;
+      document.getElementById('deck-count').textContent = myDeckCount;
+      document.getElementById('discard-count').textContent = myDiscardPile.length;
+      updateHandUI();
+      // 刺客窥视 step1：展示对手手牌供偷取
+      if(payload.peekedHand && payload.peekTargetId){
+        peekedHand = payload.peekedHand;
+        peekTargetId = payload.peekTargetId;
+        showStealPicker(peekedHand, peekTargetId);
+      }
+      // 刺客窥视 step2：展示自己手牌供归还
+      if(payload.giftPickMode){
+        showGiftPickerFromOwn();
+      }
+      break;
+
+    case 'DICE_ROLLED':
+      // 显示掷骰结果动画
+      showDiceRoll(payload);
+      break;
+
+    case 'CHARACTER_PICKED':
+      // Someone picked — clear preselection, STATE_SYNC will refresh the grid
+      preselectedChar = null;
+      break;
+
+    case 'GAME_STARTED':
+      showScreen('game-screen');
+      document.getElementById('game-room-code').textContent = myRoomCode;
+      pickingPhase = false;
+      selectedCardIdx = -1;
+      selectedTargets = [];
+      break;
+
+    case 'GAME_OVER':
+      if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+      showGameOver(payload);
+      break;
+
+    case 'TIMEOUT':
+      // 超时提示
+      break;
+
+    case 'ERROR':
+      showError(payload.msg || '未知错误');
+      break;
+
+    case 'RECONNECTED':
+      myPlayerId = payload.playerId;
+      myRoomCode = payload.roomCode;
+      showScreen('game-screen');
+      document.getElementById('game-room-code').textContent = myRoomCode;
+      break;
+
+    case 'PONG':
+      break;
+  }
+}
+
+// ==================== 掷骰显示 ====================
+function showDiceRoll(payload){
+  showScreen('pick-screen');
+  const rolls = payload.rolls || [];
+  const pickOrder = payload.pickOrder || [];
+  pickOrderGlobal = pickOrder; // 保存供 STATE_SYNC 使用
+  const myRoll = rolls.find(r=>r.playerId===myPlayerId);
+  const pickOrderStr = pickOrder.map((pid,i)=>{
+    const r = rolls.find(r2=>r2.playerId===pid);
+    return `${i+1}.${r?.nickname||'?'}(${r?.diceRoll||0}点)`;
+  }).join(' → ');
+
+  // 判断是否轮到我
+  const isFirstPicker = pickOrder[0] === myPlayerId;
+  if(myRoll){
+    if(isFirstPicker){
+      document.getElementById('pick-info').innerHTML =
+        `🎲 你掷出 <b>${myRoll.diceRoll}</b> 点！` +
+        ` 选角顺序：${pickOrderStr}` +
+        `<br>🟢 <b>你是第一位，请选择角色</b>`;
+    } else {
+      document.getElementById('pick-info').innerHTML =
+        `🎲 你掷出 <b>${myRoll.diceRoll}</b> 点！` +
+        ` 选角顺序：${pickOrderStr}` +
+        `<br>⏳ 等待前面的玩家选角...`;
+    }
+  }
+  pickingPhase = isFirstPicker;
+  preselectedChar = null;
+  renderPickScreen(pickOrder, rolls);
+}
+
+// ==================== 游戏UI渲染 ====================
+function updateGameUI(){
+  if(!gameState) return;
+
+  const roomCode = gameState.roomCode || myRoomCode;
+  document.getElementById('game-room-code').textContent = roomCode;
+
+  // 更新阶段文字
+  const phaseMap = {
+    'WAITING':'等待玩家', 'ROLLING':'掷骰中', 'PICKING':'选角中',
+    'DEALING':'发牌中', 'PLAYING':'对战中', 'GAME_OVER':'游戏结束'
+  };
+  document.getElementById('phase-text').textContent = phaseMap[gameState.phase] || gameState.phase;
+  document.getElementById('turn-info').textContent = `回合 ${gameState.turnCount||0}`;
+
+  // 确定我在不在游戏中、是不是我的回合
+  const players = gameState.players || [];
+  const me = players.find(p=>p.id===myPlayerId);
+  const currentPlayerId = (gameState.turnOrder||[])[gameState.currentPlayerIndex||0];
+  const wasMyTurn = isMyTurn;
+  isMyTurn = (currentPlayerId === myPlayerId) &&
+             gameState.phase === 'PLAYING' && me && me.isAlive;
+  const isMyChain = gameState.awaitingChain && gameState.chainPlayerId === myPlayerId;
+
+  // 回合切换音效
+  if(isMyTurn && !wasMyTurn) sfxTurnStart();
+  // 连锁提示音
+  if(isMyChain && !gameState?.awaitingChain) sfxChain();
+
+  // 同步服务端下发的剩余出牌次数
+  if(isMyTurn || isMyChain){
+    playsLeft = (gameState.playsRemaining != null) ? gameState.playsRemaining : 1;
+  } else {
+    playsLeft = 0;
+  }
+
+  // 渲染面板
+  renderBoard(players, currentPlayerId);
+  updateHandUI();
+  updateActionBar();
+  updateLogPanel();
+  updateIconLegend();
+  updateCountdown();
+  updateLightningCounter();
+
+  // 游戏结束
+  if(gameState.phase === 'GAME_OVER'){
+    showGameOverFromState(players);
+  }
+}
+
+function renderBoard(players, currentPlayerId){
+  const board = document.getElementById('board');
+  const me = players.find(p=>p.id===myPlayerId);
+  if(!me) return;
+
+  const others = players.filter(p=>p.id!==myPlayerId).sort((a,b)=>a.seatIndex-b.seatIndex);
+  const total = players.length;
+
+  // 构建十字布局：上方对手 → 左右对手+空白 → 下方自己
+  let topRow = '', midRow = '', botRow = '';
+
+  if(total === 2){
+    // 2人：对手在上，我在下
+    topRow = `<div class="board-row">${renderPlayerCard(others[0], currentPlayerId)}</div>`;
+    midRow = `<div class="board-row" style="font-size:24px;color:var(--text-dim);padding:10px">⚔️ VS ⚔️</div>`;
+    botRow = `<div class="board-row">${renderPlayerCard(me, currentPlayerId)}</div>`;
+  } else if(total === 3){
+    // 3人：两个对手并排在上，我在下
+    topRow = `<div class="board-row">${others.map(p=>renderPlayerCard(p, currentPlayerId)).join('')}</div>`;
+    midRow = `<div class="board-row" style="font-size:20px;color:var(--text-dim);padding:6px">━━━━━━━━</div>`;
+    botRow = `<div class="board-row">${renderPlayerCard(me, currentPlayerId)}</div>`;
+  } else {
+    // 4人：三人并排在上，我在下
+    topRow = `<div class="board-row">${others.map(p=>renderPlayerCard(p, currentPlayerId)).join('')}</div>`;
+    midRow = `<div class="board-row" style="font-size:20px;color:var(--text-dim);padding:6px">━━━━━━━━</div>`;
+    botRow = `<div class="board-row">${renderPlayerCard(me, currentPlayerId)}</div>`;
+  }
+
+  board.innerHTML = `<div class="board-inner">${topRow}${midRow}${botRow}</div>`;
+}
+
+function renderPlayerCard(p, currentPlayerId){
+  const charInfo = CHARACTERS[p.character] || {};
+  const color = CHAR_COLORS[p.character] || '#888';
+  const hpPct = p.maxHp > 0 ? (p.hp / p.maxHp * 100) : 0;
+  const hpColor = hpPct > 60 ? '#44ff44' : hpPct > 30 ? '#ffaa00' : '#ff4444';
+  const isCurrent = p.id === currentPlayerId;
+  const isDead = !p.isAlive;
+  const isMe = p.id === myPlayerId;
+
+  return `
+    <div class="player-card ${isCurrent?'current-turn':''} ${isDead?'dead':''} ${!p.connected?'disconnected':''}
+         ${isMyTurn&&!isMe&&!isDead?'targetable':''}"
+         ${(isMyTurn&&!isMe&&!isDead)?`onclick="selectTarget(${p.seatIndex})"`:''}
+         data-seat="${p.seatIndex}">
+      <div style="display:flex;align-items:center">
+        <span class="char-icon">${charInfo.emoji||'❓'}</span>
+        <span class="name">${p.character||'未选择'} ${isMe?'(我)':''}</span>
+      </div>
+      <div class="hp-bar"><div class="hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
+      <div style="font-size:11px">❤️ ${p.hp}/${p.maxHp} | 🛡️ ${p.shield||0} | 🔰 ${p.greenShield||0}</div>
+      <div style="font-size:10px;color:var(--text-dim);margin-top:2px">🎴${p.handCount!=null?p.handCount:'?'} 📚${p.deckCount!=null?p.deckCount:'?'} 🗑️${p.discardCount!=null?p.discardCount:'?'}</div>
+      <div class="buffs">${(p.buffs||[]).join(' ')}</div>
+      ${p.beastForm?`<div class="beast-badge" style="background:${color}33;color:${color};font-weight:bold;font-size:13px;margin-top:4px;display:flex;align-items:center;gap:4px">
+        ${p.beastForm==='bear'?'🐻 熊形态':p.beastForm==='wolf'?'🐺 狼形态 '+(p.wolfBuff?'⚡+1伤害':'') :'🐯 虎形态'}
+        <span style="font-size:10px;opacity:0.7">| +2🛡️回合开始 | 对邻位1点伤害回合结束</span>
+      </div>`:''}
+      ${!p.connected?'<div style="color:#ff4444;font-size:11px">⚠️ 断线</div>':''}
+      ${isDead?'<div style="color:#ff4444;font-size:12px">💀 阵亡</div>':''}
+    </div>
+  `;
+}
+
+function updateHandUI(){
+  const handArea = document.getElementById('hand-area');
+  if(!myHand || myHand.length === 0){
+    handArea.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px">手牌为空</div>';
+    return;
+  }
+
+  handArea.innerHTML = myHand.map((cardId, idx)=>{
+    const card = CARDS_LOCAL[cardId] || {name:cardId, effects:[], desc:'', character:''};
+    const color = CHAR_COLORS[card.character] || '#888';
+    const selected = idx === selectedCardIdx;
+    const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
+    const canPlay = isMyTurn || isMyChain;
+    return `
+      <div class="card${selected?' selected':''}${!canPlay?' unplayable':''}"
+           style="border-color:${color}"
+           onclick="onCardClick(${idx})">
+        <div class="card-char-tag" style="color:${color}">${card.character||''}</div>
+        <div class="card-name">${card.name}</div>
+        <div class="card-icons">${(card.effects||[]).join('')}</div>
+        <div class="card-desc">${card.desc}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function onCardClick(idx){
+  // 仅选中/取消选中卡牌，不自动打出
+  const canAct = isMyTurn || (gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId);
+  if(!canAct) return;
+  if(idx === selectedCardIdx){
+    // 取消选中
+    selectedCardIdx = -1;
+    selectedTargets = [];
+  } else {
+    selectedCardIdx = idx;
+    selectedTargets = [];
+  }
+  updateHandUI();
+  updateActionBar();
+}
+
+function confirmPlayCard(){
+  const canAct = isMyTurn || (gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId);
+  if(!canAct) return;
+  if(selectedCardIdx < 0) return;
+  const targets = selectedTargets;
+
+  doPlayCard(selectedCardIdx, targets);
+
+  selectedCardIdx = -1;
+  selectedTargets = [];
+  updateHandUI();
+  updateActionBar();
+
+  // 出牌权归零 → 停倒计时，避免归零时 autoPlayAnyCard 又打一张
+  if(playsLeft <= 0){
+    if(countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
+    document.getElementById('countdown-box').style.display = 'none';
+  }
+}
+
+function selectTarget(seatIndex){
+  const canAct = isMyTurn || (gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId);
+  if(!canAct || selectedCardIdx < 0) return;
+  const card = CARDS_LOCAL[myHand[selectedCardIdx]];
+  if(!card) return;
+  const needsTarget = (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  if(!needsTarget) return;
+
+  // 切换目标 — click again to deselect
+  const idx = selectedTargets.indexOf(seatIndex);
+  if(idx >= 0){
+    selectedTargets.splice(idx, 1);
+  } else {
+    selectedTargets.push(seatIndex);
+  }
+
+  // 视觉反馈
+  document.querySelectorAll('.player-card.targetable').forEach(el=>{
+    const seat = parseInt(el.dataset.seat);
+    if(selectedTargets.includes(seat)){
+      el.style.borderColor = '#ff0';
+      el.style.boxShadow = '0 0 20px rgba(255,255,0,0.6)';
+    } else {
+      el.style.borderColor = '';
+      el.style.boxShadow = '';
+    }
+  });
+  updateActionBar();
+}
+
+// ===== 弃牌堆查看 =====
+function showDiscardPile(){
+  const modal = document.getElementById('discard-modal');
+  const list = document.getElementById('discard-list');
+  if(!myDiscardPile || myDiscardPile.length === 0){
+    list.innerHTML = '<p style="color:var(--text-dim);text-align:center">弃牌堆为空</p>';
+  } else {
+    // 按顺序显示（最后打出在最右）
+    list.innerHTML = myDiscardPile.map((cardId,i)=>{
+      const c = CARDS_LOCAL[cardId] || {name:cardId, effects:[], character:''};
+      const color = CHAR_COLORS[c.character] || '#888';
+      return `<div class="discard-mini-card" style="border-color:${color}44" title="${c.desc||''}">
+        <div class="mini-name" style="color:${color}">${c.name}</div>
+        <div class="mini-icons">${(c.effects||[]).join('')}</div>
+        <div style="font-size:8px;color:var(--text-dim)">#${i+1}</div>
+      </div>`;
+    }).join('');
+  }
+  modal.classList.add('show');
+}
+function closeDiscardPile(){
+  document.getElementById('discard-modal').classList.remove('show');
+}
+
+// ===== 刺客换牌：两步走 =====
+function showStealPicker(peeked, targetId){
+  // 第一步：从对手手牌中选一张偷取
+  document.getElementById('gift-picker').classList.add('show');
+  const container = document.getElementById('gift-cards');
+  container.innerHTML = `
+    <div style="width:100%;text-align:center;margin-bottom:8px;font-size:13px;color:var(--text-dim)">
+      👀 对方的手牌如下，<b>选一张偷取</b>：
+    </div>
+    ${(peeked||[]).map(cid=>{
+      const c = CARDS_LOCAL[cid] || {name:cid, effects:[], character:''};
+      const color = CHAR_COLORS[c.character] || '#888';
+      return `<div class="gift-card" style="border-color:${color}" onclick="sendStealCard('${cid}')">
+        <div style="font-size:10px;font-weight:bold;color:${color}">${c.name}</div>
+        <div style="font-size:16px">${(c.effects||[]).join('')}</div>
+        <div style="font-size:9px;color:var(--text-dim)">${c.desc}</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function sendStealCard(cardId){
+  send('PICK_STEAL_CARD', {playerId:myPlayerId, cardId:cardId});
+  // 立即关闭偷牌选择器，等待服务端 STATE_SYNC 触发第二步
+  document.getElementById('gift-picker').classList.remove('show');
+}
+
+function showGiftPickerFromOwn(){
+  document.getElementById('gift-picker').classList.add('show');
+  const container = document.getElementById('gift-cards');
+  container.innerHTML = `
+    <div style="width:100%;text-align:center;margin-bottom:8px;font-size:13px;color:var(--text-dim)">
+      已偷到对手的牌！<b>选一张自己手牌还给对方</b>：
+    </div>
+    ${myHand.map(cid=>{
+      const c = CARDS_LOCAL[cid] || {name:cid, effects:[], character:''};
+      const color = CHAR_COLORS[c.character] || '#888';
+      return `<div class="gift-card" style="border-color:${color}" onclick="sendGiftCard('${cid}')">
+        <div style="font-size:10px;font-weight:bold;color:${color}">${c.name}</div>
+        <div style="font-size:16px">${(c.effects||[]).join('')}</div>
+        <div style="font-size:9px;color:var(--text-dim)">${c.desc}</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function closeGiftPicker(){
+  document.getElementById('gift-picker').classList.remove('show');
+}
+
+function sendGiftCard(cardId){
+  send('PICK_GIFT_CARD', {playerId:myPlayerId, cardId:cardId});
+  closeGiftPicker();
+  peekedHand = null;
+  peekTargetId = null;
+  // 立即刷新操作栏，换牌完成后过牌按钮变橙色
+  playsLeft = 0;
+  updateActionBar();
+}
+
+function autoPlayAnyCard(){
+  // 超时/强制出牌：手牌中随机选一张打出
+  if(!myHand || myHand.length === 0) return;
+  const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
+  if(!isMyTurn && !isMyChain) return;
+
+  let idx = myHand.findIndex(cid=>{
+    const c = CARDS_LOCAL[cid];
+    return c && !(c.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  });
+  if(idx < 0) idx = 0;
+
+  const cardId = myHand[idx];
+  if(isMyChain){
+    send('CHAIN_CONTINUE', {playerId:myPlayerId, continue:true, cardId:cardId, targets:[]});
+  } else {
+    send('PLAY_CARD', {playerId:myPlayerId, cardId:cardId, targets:[]});
+  }
+  selectedCardIdx = -1;
+  selectedTargets = [];
+}
+
+function updateActionBar(){
+  const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
+  const playBtn = document.getElementById('btn-play-card');
+  const passBtn = document.getElementById('btn-pass-turn');
+  const badge = document.getElementById('playable-badge');
+  const badgeCount = document.getElementById('playable-count');
+  const hintEl = document.getElementById('action-hint');
+
+  const canAct = isMyTurn || isMyChain;
+
+  // 出牌按钮
+  playBtn.style.display = (canAct && playsLeft > 0) ? 'inline-block' : 'none';
+  // 过牌按钮：轮到就显示，始终橙色可点
+  passBtn.style.display = canAct ? 'inline-block' : 'none';
+  passBtn.removeAttribute('disabled');
+  passBtn.classList.add('active');
+
+  // 剩余出牌数徽章
+  if(canAct){
+    badge.style.display = 'flex';
+    badgeCount.textContent = playsLeft;
+    if(playsLeft > 0){
+      badgeCount.style.color = '#ffd700';
+      badge.style.opacity = '1';
+    } else {
+      badgeCount.style.color = '#888';
+      badge.style.opacity = '0.5';
+    }
+  } else {
+    badge.style.display = 'none';
+  }
+
+  const hasCard = selectedCardIdx >= 0;
+  const card = hasCard ? CARDS_LOCAL[myHand[selectedCardIdx]] : null;
+  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  const ready = hasCard && (!needsTarget || selectedTargets.length >= 1);
+
+  playBtn.disabled = !ready;
+  playBtn.style.opacity = ready ? '1' : '0.4';
+
+  if(isMyChain){
+    playBtn.textContent = '⚡ 出牌';
+    if(!hasCard){
+      hintEl.textContent = '⚡ 剩余 ' + playsLeft + ' 次出牌！选择一张手牌打出';
+    } else if(needsTarget && selectedTargets.length === 0){
+      hintEl.textContent = '⚡ 点击敌方玩家选择目标 (剩余' + playsLeft + '次)';
+    } else {
+      hintEl.textContent = '⚡ 点击「出牌」打出 (剩余' + playsLeft + '次)';
+    }
+  } else if(isMyTurn){
+    if(playsLeft > 0){
+      playBtn.textContent = '🎴 出牌';
+      if(!hasCard){
+        hintEl.textContent = '必须出牌！剩余 ' + playsLeft + ' 次';
+      } else if(needsTarget && selectedTargets.length === 0){
+        hintEl.textContent = '点击敌方玩家选择攻击目标';
+      } else {
+        hintEl.textContent = '点击「出牌」打出卡牌';
+      }
+    } else {
+      hintEl.textContent = '出牌完毕，点击「过牌」结束回合';
+    }
+  } else if(gameState?.awaitingChain){
+    hintEl.textContent = '等待其他玩家连锁...';
+  } else {
+    hintEl.textContent = '等待其他玩家行动...';
+  }
+}
+
+// ==================== 图标图例 ====================
+const BASE_ICONS = {
+  '🗡️': '伤害：对目标造成 1 点伤害',
+  '🛡️': '护盾：获得 1 层普通护盾，抵消 1 次伤害',
+  '❤️': '治疗：回复 1 点生命值（不超过上限）',
+  '🃏': '抽牌：立即抽 1 张牌，本回合可用',
+  '⚡':  '闪电：额外获得 1 次出牌机会',
+};
+const CHAR_SKILL_ICONS = {
+  '战士': [['🩸','血怒：回合结束时对所有敌人造成 1 点伤害']],
+  '牧师': [['💕','生命祝福：永久提升血量上限 +1'],['♻️','生命交换：与一名玩家互换当前血量']],
+  '法师': [['⛈️','雷暴诅咒：目标每回合受 1 点真实伤害，持续至法师下回合'],['🙏','祈祷：每打出 2 张牌自动抽 1 张']],
+  '坦克': [['💥','破盾波：清除全场敌人的所有普通护盾'],['🔰','荆棘装甲：获得反伤绿盾，受伤时反弹 1 点真实伤害']],
+  '兽人': [['🐾','野兽本能：根据当前形态触发被动效果'],['🐻','熊形态：+2 护盾 / 回合结束对邻位伤害'],['🐺','狼形态：下次攻击 +1 伤害 / 回合结束对邻位伤害'],['🐯','虎形态：抽 1 张牌 / 回合结束对邻位伤害']],
+  '刺客': [['👀','窥视：查看对手手牌，偷 1 张并还 1 张'],['🫥','相位偏移：隐身一回合，完全免疫所有伤害']],
+};
+function updateIconLegend(){
+  const el = document.getElementById('icon-legend');
+  if(!el) return;
+  const me = (gameState?.players||[]).find(p=>p.id===myPlayerId);
+  if(!me || !me.character){ el.innerHTML=''; return; }
+  const char = me.character;
+  const skills = CHAR_SKILL_ICONS[char] || [];
+  let html = '<div class="legend-title">'+char+' 图标含义</div>';
+  html += '<div class="legend-divider">基础图标</div>';
+  Object.entries(BASE_ICONS).forEach(([icon,desc])=>{
+    html += '<div class="legend-row"><span class="legend-icon">'+icon+'</span><span class="legend-desc">'+desc+'</span></div>';
+  });
+  if(skills.length > 0){
+    html += '<div class="legend-divider">'+char+' 技能图标</div>';
+    skills.forEach(([icon,desc])=>{
+      html += '<div class="legend-row"><span class="legend-icon">'+icon+'</span><span class="legend-desc">'+desc+'</span></div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+function updateLogPanel(){
+  const logs = gameState?.gameLogs || [];
+  const panel = document.getElementById('log-panel');
+  panel.innerHTML = '<div style="font-weight:bold;margin-bottom:4px">📜 战斗日志</div>' +
+    logs.slice(-15).map(l=>`<div class="log-entry">${l}</div>`).join('');
+}
+
+// ==================== 倒计时 ====================
+// ==================== 闪电连锁计数器 ====================
+function updateLightningCounter(){
+  // 使用 playsRemaining 统一显示（来自服务端 STATE_SYNC）
+  const el = document.getElementById('lightning-counter');
+  if(!el) return;
+  const remaining = document.getElementById('chain-remaining');
+  if(!remaining) return;
+
+  const someoneChaining = gameState?.awaitingChain;
+  if(someoneChaining && remaining){
+    el.style.display = 'flex';
+    const left = (gameState.playsRemaining != null) ? gameState.playsRemaining : 0;
+    remaining.textContent = left;
+    remaining.style.color = left <= 1 ? '#ff4444' : '#ffd700';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function updateCountdown(){
+  const box = document.getElementById('countdown-box');
+  const num = document.getElementById('cd-num');
+  const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
+
+  if(!isMyTurn && !isMyChain){
+    box.style.display = 'none';
+    if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+    return;
+  }
+  // 出牌权已用尽 → 不重启倒计时
+  if(playsLeft <= 0 && !isMyChain){
+    box.style.display = 'none';
+    if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+    return;
+  }
+  box.style.display = 'flex';
+  if(!countdownTimer){
+    countdownValue = isMyChain ? 15 : 60;
+    num.textContent = countdownValue;
+    box.classList.remove('urgent');
+    countdownTimer = setInterval(()=>{
+      countdownValue--;
+      num.textContent = countdownValue;
+      if(countdownValue <= 10) box.classList.add('urgent');
+      else box.classList.remove('urgent');
+      if(countdownValue <= 0){
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+        if(isMyChain){
+          send('CHAIN_CONTINUE', { playerId: myPlayerId, continue: false });
+        } else if(playsLeft > 0){
+          autoPlayAnyCard();
+        } else {
+          // 已出过牌 → 自动过牌
+          send('END_TURN', {playerId: myPlayerId});
+        }
+      }
+    }, 1000);
+  }
+}
+
+// ==================== 游戏结束 ====================
+function showGameOver(payload){
+  const winner = payload.winner;
+  document.getElementById('win-content').innerHTML = `
+    <div class="winner-char">🏆</div>
+    <div class="winner-text">${winner?winner.character+' 获胜！':'平局！'}</div>
+    <button onclick="location.reload()" style="background:var(--info);color:#fff">🔄 返回大厅</button>
+  `;
+  document.getElementById('win-modal').classList.add('show');
+}
+
+function showGameOverFromState(players){
+  const winner = players.find(p=>p.isAlive);
+  if(winner){
+    const charInfo = CHARACTERS[winner.character]||{};
+    document.getElementById('win-content').innerHTML = `
+      <div class="winner-char">${charInfo.emoji||'🏆'}</div>
+      <div class="winner-text">${winner.character} 获胜！</div>
+      <button onclick="location.reload()" style="background:var(--info);color:#fff">🔄 返回大厅</button>
+    `;
+    document.getElementById('win-modal').classList.add('show');
+  }
+}
+
+// ==================== 心跳 ====================
+setInterval(()=>{
+  if(ws && ws.readyState === WebSocket.OPEN){
+    send('PING', {playerId: myPlayerId});
+  }
+}, 5000);
+
+// ==================== 特效引擎（强化版） ====================
+const fxCanvas = document.getElementById('fx-canvas');
+const fxCtx = fxCanvas.getContext('2d');
+let fxW = 960, fxH = 540;
+let fxParticles = [], fxRings = [], fxFlashes = [], fxScreenShake = 0;
+fxCtx.shadowBlur = 0;
+
+function fxResize(){ const r=fxCanvas.parentElement.getBoundingClientRect(); fxW=r.width; fxH=r.height; fxCanvas.width=fxW; fxCanvas.height=fxH; }
+fxResize(); window.addEventListener('resize', fxResize);
+
+const FX_COLORS = {
+  warrior:{p:'#ff4444',s:'#ff8888',g:'rgba(255,60,60,0.6)',b:'#ff0000'},
+  priest:{p:'#ffcc00',s:'#ffee66',g:'rgba(255,200,20,0.6)',b:'#ffd700'},
+  mage:{p:'#3399ff',s:'#88ddff',g:'rgba(40,150,255,0.6)',b:'#00aaff'},
+  tank:{p:'#33cc66',s:'#88ffaa',g:'rgba(40,200,80,0.6)',b:'#00ff66'},
+  orc:{p:'#ff7722',s:'#ffbb66',g:'rgba(255,100,20,0.6)',b:'#ff5500'},
+  assassin:{p:'#9944ff',s:'#ddaaff',g:'rgba(140,60,255,0.6)',b:'#8800ff'}
+};
+const CHAR_FX_MAP = {'战士':'warrior','牧师':'priest','法师':'mage','坦克':'tank','兽人':'orc','刺客':'assassin'};
+const SKILL_EFFECTS = new Set(['⚡','🩸','💕','♻️','⛈️','🙏','💥','🔰','🐾','🐻','🐺','🐯','👀','🫥']);
+const fxRand=(a,b)=>Math.random()*(b-a)+a;
+
+function fxEmit(x,y,count,c1,c2,speed,life,szMin,szMax){
+  for(let i=0;i<count;i++){let a=fxRand(0,Math.PI*2),sp=fxRand(speed*0.4,speed);fxParticles.push({x,y,vx:Math.cos(a)*sp*fxRand(0.5,1.5),vy:Math.sin(a)*sp*fxRand(0.5,1.5),life:fxRand(life*0.5,life),maxLife:life,size:fxRand(szMin,szMax),color:Math.random()>0.5?c1:c2,gravity:fxRand(-0.08,0.08),drag:fxRand(0.94,0.995),decay:fxRand(0.006,0.022),glow:true});}
+}
+function fxRing(x,y,r,c,w,life){fxRings.push({x,y,radius:r||3,maxRadius:(r||3)+fxRand(50,120),color:c,width:w||6,life,maxLife:life});}
+function fxFlash(x,y,c,sz,life){fxFlashes.push({x,y,color:c,size:sz||80,maxSize:sz||80,life,maxLife:life});}
+
+const FX = {
+  warrior:{
+    base:(x,y)=>{let c=FX_COLORS.warrior;fxEmit(x,y,60,c.p,c.s,7,1.2,3,10);fxRing(x,y,8,c.b,6,1.2);fxFlash(x,y,c.g,90,0.7);fxRing(x,y,0,c.p,3,0.6);
+      for(let i=0;i<20;i++){let a=fxRand(-1.0,1.0)+Math.PI*0.45,d=fxRand(20,90);fxParticles.push({x:x+Math.cos(a)*8,y:y+Math.sin(a)*8,vx:Math.cos(a)*fxRand(4,12),vy:Math.sin(a)*fxRand(4,12)-2,life:fxRand(0.3,0.8),maxLife:0.8,size:fxRand(3,8),color:c.b,gravity:0.10,drag:0.96,decay:0.022,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.warrior;fxEmit(x,y,90,'#ff1111','#ff9944',11,1.6,4,14);fxRing(x,y,8,'#ff2222',9,1.4);fxRing(x,y,0,'#ff9944',5,1.8);fxFlash(x,y,'rgba(255,30,30,0.8)',120,0.9);fxScreenShake=12;
+      for(let i=0;i<30;i++){let a=fxRand(0,Math.PI*2),sp=fxRand(3,10);fxParticles.push({x:x+fxRand(-12,12),y:y+fxRand(-12,12),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-2,life:fxRand(0.5,1.3),maxLife:1.3,size:fxRand(5,12),color:Math.random()>0.5?'#ff1111':'#ff8844',gravity:0.15,drag:0.97,decay:0.012,glow:true});}}
+  },
+  priest:{
+    base:(x,y)=>{let c=FX_COLORS.priest;fxEmit(x,y,52,c.p,'#ffffaa',4,1.1,3,8);fxRing(x,y,8,c.g,5,1.0);fxFlash(x,y,c.g,80,0.6);
+      for(let i=0;i<16;i++){let a=(i/16)*Math.PI*2;fxParticles.push({x:x+Math.cos(a)*6,y:y+Math.sin(a)*6,vx:Math.cos(a)*fxRand(2,5),vy:Math.sin(a)*fxRand(2,5),life:fxRand(0.4,1.0),maxLife:1.0,size:fxRand(3,7),color:'#ffff88',gravity:-0.03,drag:0.985,decay:0.018,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.priest;fxEmit(x,y,75,'#ffdd33','#ffaacc',6,1.5,4,11);fxRing(x,y,8,'#ffdd44',8,1.4);fxRing(x,y,0,'#ffaacc',5,1.6);fxFlash(x,y,'rgba(255,200,50,0.8)',120,0.85);fxScreenShake=8;
+      for(let i=0;i<26;i++){let t=(i/26)*Math.PI*2,r2=fxRand(25,65);fxParticles.push({x:x+Math.sin(t)*r2*0.6,y:y-Math.cos(t)*r2*0.6+12,vx:fxRand(-0.8,0.8),vy:fxRand(-3.5,-0.8),life:fxRand(0.6,1.3),maxLife:1.3,size:fxRand(4,9),color:'#ff99bb',gravity:-0.03,drag:0.99,decay:0.010,glow:true});}}
+  },
+  mage:{
+    base:(x,y)=>{let c=FX_COLORS.mage;fxEmit(x,y,52,c.p,'#aaeeff',7,1.1,2,8);fxRing(x,y,8,c.b,5,1.0);fxFlash(x,y,c.g,85,0.65);
+      for(let i=0;i<18;i++){let a=fxRand(0,Math.PI*2);fxParticles.push({x:x+Math.cos(a)*fxRand(0,10),y:y+Math.sin(a)*fxRand(0,10),vx:Math.cos(a+fxRand(-0.4,0.4))*fxRand(3,9),vy:Math.sin(a+fxRand(-0.4,0.4))*fxRand(3,9),life:fxRand(0.3,0.8),maxLife:0.8,size:fxRand(2,5),color:'#aaeeff',gravity:0.03,drag:0.95,decay:0.026,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.mage;fxEmit(x,y,80,'#3399ff','#ffffff',10,1.6,3,12);fxRing(x,y,8,'#3399ff',8,1.4);fxRing(x,y,0,'#aaeeff',5,1.7);fxFlash(x,y,'rgba(40,150,255,0.9)',140,0.95);fxScreenShake=10;
+      for(let i=0;i<14;i++){let a=(i/14)*Math.PI*2+fxRand(-0.2,0.2),len=fxRand(40,100);for(let j=0;j<9;j++){let t2=j/9;fxParticles.push({x:x+Math.cos(a)*len*t2+fxRand(-6,6),y:y+Math.sin(a)*len*t2+fxRand(-6,6),vx:fxRand(-0.5,0.5),vy:fxRand(-0.5,0.5),life:fxRand(0.2,0.7),maxLife:0.7,size:fxRand(2,5),color:j%2===0?'#aaeeff':'#ffffff',gravity:0,drag:0.985,decay:0.024,glow:true});}}}
+  },
+  tank:{
+    base:(x,y)=>{let c=FX_COLORS.tank;fxEmit(x,y,48,c.p,'#aaffcc',4,1.1,3,9);fxRing(x,y,8,c.p,7,1.2);fxFlash(x,y,c.g,75,0.6);
+      for(let i=0;i<22;i++){let a=fxRand(-0.8,0.8)-Math.PI/2,d=fxRand(12,55);fxParticles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d-6,vx:Math.cos(a+fxRand(-0.3,0.3))*fxRand(0.7,3),vy:Math.sin(a+fxRand(-0.3,0.3))*fxRand(0.7,3)-1,life:fxRand(0.4,1.0),maxLife:1.0,size:fxRand(4,10),color:c.s,gravity:0.06,drag:0.97,decay:0.018,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.tank;fxEmit(x,y,70,'#33cc66','#ffdd33',9,1.5,5,13);fxRing(x,y,8,'#33cc66',10,1.5);fxRing(x,y,0,'#ffdd33',6,1.8);fxFlash(x,y,'rgba(40,200,80,0.8)',130,0.85);fxScreenShake=10;
+      for(let i=0;i<30;i++){let a=fxRand(0,Math.PI*2),sp=fxRand(3,10);fxParticles.push({x:x+fxRand(-8,8),y:y+fxRand(-8,8),vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:fxRand(0.4,1.1),maxLife:1.1,size:fxRand(4,10),color:Math.random()>0.5?'#33cc66':'#ffdd33',gravity:0.08,drag:0.96,decay:0.018,glow:true});}}
+  },
+  orc:{
+    base:(x,y)=>{let c=FX_COLORS.orc;fxEmit(x,y,52,c.p,'#eebb44',7,1.1,3,9);fxRing(x,y,8,c.p,6,1.1);fxFlash(x,y,c.g,85,0.65);
+      for(let i=0;i<12;i++){let a=fxRand(-0.4,0.4)+(Math.PI/3)*((i%3)-1);fxParticles.push({x:x+Math.cos(a)*6,y:y+Math.sin(a)*6,vx:Math.cos(a)*fxRand(3,8)+fxRand(-0.8,0.8),vy:Math.sin(a)*fxRand(3,8)+fxRand(-0.8,0.8),life:fxRand(0.3,0.8),maxLife:0.8,size:fxRand(3,8),color:'#dd8833',gravity:0.07,drag:0.96,decay:0.022,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.orc;fxEmit(x,y,85,'#ff7722','#ffcc44',10,1.7,4,15);fxRing(x,y,8,'#ff7722',9,1.5);fxRing(x,y,0,'#ffcc44',5,1.8);fxFlash(x,y,'rgba(255,100,20,0.85)',135,0.95);fxScreenShake=14;
+      for(let i=0;i<24;i++){let a=fxRand(0,Math.PI*2),d=fxRand(20,75);fxParticles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,vx:Math.cos(a+fxRand(-0.5,0.5))*fxRand(0.7,3),vy:Math.sin(a+fxRand(-0.5,0.5))*fxRand(0.7,3),life:fxRand(0.5,1.4),maxLife:1.4,size:fxRand(5,12),color:Math.random()>0.5?'#ff7722':'#ffcc44',gravity:0.03,drag:0.98,decay:0.013,glow:true});}}
+  },
+  assassin:{
+    base:(x,y)=>{let c=FX_COLORS.assassin;fxEmit(x,y,42,c.p,'#ddbbff',6,1.0,2,7);fxRing(x,y,8,c.p,4,0.8);fxFlash(x,y,c.g,65,0.5);
+      for(let i=0;i<16;i++){let a=fxRand(-0.3,0.3)+(i/16)*Math.PI*2;fxParticles.push({x:x+Math.cos(a)*6,y:y+Math.sin(a)*6,vx:Math.cos(a)*fxRand(4,10),vy:Math.sin(a)*fxRand(4,10),life:fxRand(0.2,0.7),maxLife:0.7,size:fxRand(2,5),color:'#ddbbff',gravity:0.02,drag:0.94,decay:0.032,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.assassin;fxEmit(x,y,70,'#9944ff','#7733cc',9,1.5,3,12);fxRing(x,y,8,'#9944ff',7,1.4);fxRing(x,y,0,'#7733cc',5,1.6);fxFlash(x,y,'rgba(140,60,255,0.8)',115,0.85);fxScreenShake=8;
+      for(let i=0;i<22;i++){let a=fxRand(0,Math.PI*2),d=fxRand(25,80);fxParticles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,vx:Math.cos(a+fxRand(-0.4,0.4))*fxRand(0.4,2),vy:Math.sin(a+fxRand(-0.4,0.4))*fxRand(0.4,2),life:fxRand(0.4,1.1),maxLife:1.1,size:fxRand(6,14),color:'rgba(160,80,255,0.55)',gravity:0,drag:0.985,decay:0.013,glow:true});}}
+  }
+};
+
+function triggerEffect(charKey, cardType, x, y){
+  const fx = FX[charKey]; if(!fx) return;
+  const cx = Math.max(10, Math.min(fxW-10, x||fxW/2));
+  const cy = Math.max(10, Math.min(fxH-10, y||fxH/2));
+  if(cardType==='skill' && fx.skill) fx.skill(cx,cy);
+  else fx.base(cx,cy);
+}
+
+function fxAnimate(){
+  fxCtx.clearRect(0,0,fxW,fxH);
+  // Screen shake
+  if(fxScreenShake>0){let sx=(Math.random()-0.5)*fxScreenShake,sy=(Math.random()-0.5)*fxScreenShake;fxCtx.save();fxCtx.translate(sx,sy);fxScreenShake*=0.85;if(fxScreenShake<0.5)fxScreenShake=0;}
+  fxCtx.shadowColor = 'rgba(255,255,255,0.3)';
+  fxCtx.shadowBlur = 8;
+  for(let i=fxParticles.length-1;i>=0;i--){let p=fxParticles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=p.drag;p.vy*=p.drag;p.vy+=p.gravity;p.life-=p.decay;p.size*=0.996;if(p.life<=0||p.size<0.3)fxParticles.splice(i,1);}
+  for(let i=fxRings.length-1;i>=0;i--){let r=fxRings[i];r.life-=0.018;r.radius+=(r.maxRadius-r.radius)*0.05;r.width*=0.98;if(r.life<=0||r.width<0.1)fxRings.splice(i,1);}
+  for(let i=fxFlashes.length-1;i>=0;i--){let f=fxFlashes[i];f.life-=0.025;f.size*=0.96;if(f.life<=0||f.size<1.5)fxFlashes.splice(i,1);}
+  for(let pf of fxParticles){let a=Math.min(1,(pf.life/pf.maxLife)*1.4);fxCtx.globalAlpha=a;fxCtx.fillStyle=pf.color;if(pf.glow){fxCtx.shadowColor=pf.color;fxCtx.shadowBlur=pf.size*2;}else{fxCtx.shadowBlur=0;}fxCtx.beginPath();fxCtx.arc(pf.x,pf.y,Math.max(0.5,pf.size),0,Math.PI*2);fxCtx.fill();}
+  fxCtx.shadowBlur=0;
+  for(let r of fxRings){let a=Math.min(1,(r.life/r.maxLife)*1.8);fxCtx.globalAlpha=a*0.6;fxCtx.strokeStyle=r.color;fxCtx.lineWidth=r.width;fxCtx.shadowColor=r.color;fxCtx.shadowBlur=r.width*2;fxCtx.beginPath();fxCtx.arc(r.x,r.y,r.radius,0,Math.PI*2);fxCtx.stroke();}
+  fxCtx.shadowBlur=0;
+  for(let f of fxFlashes){let a=Math.min(1,(f.life/f.maxLife)*2.2);let g=fxCtx.createRadialGradient(f.x,f.y,0,f.x,f.y,f.size);g.addColorStop(0,f.color);g.addColorStop(1,'transparent');fxCtx.globalAlpha=a*0.6;fxCtx.fillStyle=g;fxCtx.beginPath();fxCtx.arc(f.x,f.y,f.size,0,Math.PI*2);fxCtx.fill();}
+  fxCtx.globalAlpha=1;
+  if(fxScreenShake>0)fxCtx.restore();
+  requestAnimationFrame(fxAnimate);
+}
+fxAnimate();
+
+function playCardEffect(character, cardId){
+  const fxKey = CHAR_FX_MAP[character]; if(!fxKey) return;
+  const card = CARDS_LOCAL[cardId]; if(!card) return;
+  const isSkill = (card.effects||[]).some(e=>SKILL_EFFECTS.has(e));
+  const cx = fxW/2 + fxRand(-160,160);
+  const cy = fxH*0.65 + fxRand(-80,80);
+  triggerEffect(fxKey, isSkill?'skill':'base', cx, cy);
+}
+
+// ==================== 音效引擎（低延迟 Web Audio API） ====================
+let audioCtx = null;
+function initAudio(){ if(!audioCtx) audioCtx = new(window.AudioContext||window.webkitAudioContext)(); }
+
+// 首个用户交互时预热 AudioContext
+document.addEventListener('click', function warmAudio(){ initAudio(); }, {once:true});
+
+function playTone(freq, duration, type, vol, glide, delay){
+  if(!audioCtx){ initAudio(); if(!audioCtx) return; }
+  const t = audioCtx.currentTime + (delay||0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type||'sine';
+  osc.frequency.setValueAtTime(freq, t);
+  if(glide) osc.frequency.linearRampToValueAtTime(freq*glide, t+duration*0.5);
+  gain.gain.setValueAtTime(vol||0.12, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t+duration);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t+duration);
+}
+
+function sfxCardSelect(){
+  initAudio(); if(!audioCtx) return;
+  playTone(800,0.08,'sine',0.06,1.5,0);
+  playTone(1200,0.06,'sine',0.04,1.0,0.03);
+}
+function sfxButtonClick(){
+  initAudio(); if(!audioCtx) return;
+  playTone(600,0.05,'square',0.03,0.5,0);
+}
+
+const SFX_MELODIES = {
+  warrior:{base:[440,554,660],skill:[330,440,554,660,880]},
+  priest:{base:[523,659,784],skill:[392,523,659,784,1047]},
+  mage:{base:[330,440,554],skill:[262,330,440,554,660]},
+  tank:{base:[392,330,262],skill:[196,262,330,392,523]},
+  orc:{base:[349,440,523],skill:[262,349,440,523,698]},
+  assassin:{base:[587,698,880],skill:[440,587,698,880,1175]}
+};
+
+function sfxCardPlay(character, isSkill){
+  initAudio(); if(!audioCtx) return;
+  const melody = (SFX_MELODIES[character]||SFX_MELODIES.warrior)[isSkill?'skill':'base'];
+  const now = audioCtx.currentTime;
+  melody.forEach((freq,i)=>{
+    const t = now + i*0.028;
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.type = isSkill?'sawtooth':'triangle';
+    osc.frequency.setValueAtTime(freq, t);
+    osc.frequency.setValueAtTime(freq*(isSkill?1.4:1.1), t+0.06);
+    gain.gain.setValueAtTime(isSkill?0.10:0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t+0.14);
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(t); osc.stop(t+0.16);
+  });
+}
+function sfxTurnStart(){
+  playTone(300,0.14,'sine',0.06,1.5,0);
+  playTone(450,0.12,'sine',0.06,1.0,0.06);
+}
+function sfxChain(){
+  playTone(500,0.08,'square',0.05,1.3,0);
+  playTone(700,0.07,'square',0.04,1.3,0.04);
+  playTone(900,0.06,'square',0.03,1.3,0.08);
+}
+function sfxPass(){playTone(250,0.14,'sine',0.05,0.5,0);}
+
+// ==================== 音效钩子 ====================
+document.addEventListener('click', function(e){
+  const t = e.target;
+  if(t.closest('.card')) sfxCardSelect();
+  else if(t.closest('.btn-play-card')||t.closest('.btn-pass-turn')||t.closest('.btn-confirm')||t.closest('.btn-create')||t.closest('.btn-join')) sfxButtonClick();
+}, true);
+
+// ==================== 启动 ====================
+connectWS();
+showScreen('lobby-screen');
+</script>
+</body>
+</html>
