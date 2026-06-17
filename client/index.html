@@ -479,7 +479,7 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
       </div>
     </div>
     <button class="btn-play-card" id="btn-play-card" disabled onclick="confirmPlayCard()">🎴 出牌</button>
-    <span id="playable-badge" style="display:none;font-size:14px;font-weight:bold;color:var(--gold);gap:4px;align-items:center;background:#ffd70015;padding:4px 10px;border-radius:12px">
+    <span id="playable-badge" style="display:none;font-size:14px;font-weight:bold;color:var(--gold);gap:4px;align-items:center;background:rgba(139,105,20,0.12);padding:4px 10px;border-radius:12px">
       🎴<span id="playable-count">1</span>
     </span>
     <button class="btn-pass-turn" id="btn-pass-turn" onclick="manualPassTurn()">⏩ 过牌</button>
@@ -1709,7 +1709,7 @@ function updateActionBar(){
     badge.style.display = 'flex';
     badgeCount.textContent = playsLeft;
     if(playsLeft > 0){
-      badgeCount.style.color = '#ffd700';
+      badgeCount.style.color = '#b8860b';
       badge.style.opacity = '1';
     } else {
       badgeCount.style.color = '#888';
