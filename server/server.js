@@ -10,7 +10,7 @@ const fs = require("fs");
 const path = require("path");
 const WebSocket = require("ws");
 
-const { handleMessage } = require("./messageHandler");
+const { handleMessage, send } = require("./messageHandler");
 const { roomManager } = require("./roomManager");
 
 // 静态文件 MIME 映射
@@ -104,8 +104,11 @@ wss.on("connection", (ws, req) => {
     try {
       handleMessage(ws, data.toString());
     } catch (err) {
-      console.error("[消息错误]", err.message);
-      // 不崩溃进程，静默吞掉异常
+      console.error("[消息错误]", err.message, err.stack);
+      // 尝试告知客户端发生了服务器错误
+      try {
+        send(ws, "ERROR", { msg: "服务器内部错误: " + err.message });
+      } catch (_) { /* 忽略发送失败 */ }
     }
   });
 

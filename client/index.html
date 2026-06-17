@@ -529,23 +529,61 @@ const CHAR_COLORS = {
 };
 
 // ==================== WebSocket ====================
+let pendingMessages = []; // 断线期间暂存的消息队列
+
 function connectWS(){
+  console.log('[WS] Connecting to', WS_URL);
   ws = new WebSocket(WS_URL);
-  ws.onopen = () => { console.log("WS connected"); };
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    handleServerMessage(msg);
+  ws.onopen = () => {
+    console.log('[WS] ✅ Connected');
+    // 清除错误提示
+    document.getElementById('lobby-error').textContent = '';
+    // 连接成功后发送所有暂存消息
+    if (pendingMessages.length > 0) {
+      console.log('[WS] Flushing', pendingMessages.length, 'pending messages');
+      const msgs = pendingMessages;
+      pendingMessages = [];
+      for (const m of msgs) {
+        send(m.type, m.payload);
+      }
+    }
   };
-  ws.onclose = () => {
-    console.log("WS disconnected, retrying in 2s...");
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      console.log('[WS] ←', msg.type, msg.payload ? JSON.stringify(msg.payload).slice(0, 120) : '');
+      handleServerMessage(msg);
+    } catch(err) {
+      console.error('[WS] Parse error:', err.message, 'raw:', String(e.data).slice(0, 200));
+    }
+  };
+  ws.onclose = (e) => {
+    console.log('[WS] ❌ Disconnected (code=' + e.code + '), retrying in 2s...');
     setTimeout(connectWS, 2000);
   };
-  ws.onerror = (err) => { console.error("WS error", err); };
+  ws.onerror = (err) => {
+    console.error('[WS] ⚠️ Error - readyState=' + (ws ? ws.readyState : 'null'), err);
+  };
 }
 
 function send(type, payload={}){
+  console.log('[WS] →', type, JSON.stringify(payload).slice(0, 120));
   if(ws && ws.readyState === WebSocket.OPEN){
     ws.send(JSON.stringify({type, timestamp: Date.now(), payload}));
+  } else if (ws && ws.readyState === WebSocket.CONNECTING) {
+    // 连接中，暂存消息
+    console.log('[WS] Queuing message (CONNECTING)');
+    pendingMessages.push({type, payload});
+    showError('正在连接服务器，请稍候...');
+  } else {
+    // 未连接或已关闭
+    console.error('[WS] Cannot send - readyState=' + (ws ? ws.readyState : 'null'));
+    pendingMessages.push({type, payload});
+    showError('服务器连接已断开，正在重连...');
+    // 触发重连
+    if (!ws || ws.readyState === WebSocket.CLOSED) {
+      connectWS();
+    }
   }
 }
 
@@ -574,7 +612,9 @@ function showError(msg){
 }
 
 function createRoom(){
+  console.log('[UI] createRoom clicked');
   const nick = document.getElementById('nickname-input').value.trim() || 'Player';
+  console.log('[UI] Nickname:', nick, 'WS state:', ws ? ws.readyState : 'null');
   send('CREATE_ROOM', {nickname: nick});
 }
 
@@ -715,6 +755,7 @@ function chainContinue(wantContinue){
 // ==================== 服务端消息处理 ====================
 function handleServerMessage(msg){
   const {type, payload} = msg;
+  try {
   switch(type){
     case 'ROOM_CREATED':
       myPlayerId = payload.playerId;
@@ -860,6 +901,9 @@ function handleServerMessage(msg){
 
     case 'PONG':
       break;
+  }
+  } catch(err) {
+    console.error('[MSG] Error handling', type, ':', err.message, err.stack);
   }
 }
 
