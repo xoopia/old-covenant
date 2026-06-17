@@ -72,6 +72,7 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
 .btn-create:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(74,124,63,0.3)}
 .btn-join{background:var(--info);color:var(--text)}
 .btn-join:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(74,111,165,0.3)}
+.lobby-back-btn{position:absolute;top:16px;left:16px;background:transparent;border:1px solid var(--border-soft);color:var(--text-dim);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px;transition:all .2s}.lobby-back-btn:hover{border-color:var(--gold);color:var(--gold)}
 .lobby-divider{text-align:center;margin:16px 0;color:var(--text-dim)}
 .lobby-error{color:var(--danger);text-align:center;margin-top:8px;min-height:24px}
 .room-code-display{
@@ -272,28 +273,37 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
 }
 .modal-box button:hover{opacity:0.85}
 
-/* 规则弹窗 & 图鉴弹窗（大尺寸可滚动） */
-.rules-box,.library-box{
-  max-width:800px;max-height:85vh;overflow-y:auto;text-align:left;
-  padding:28px 34px;
+/* ====== 全屏内容页（规则/图鉴） ====== */
+#rules-screen,#library-screen{
+  padding:16px 28px;overflow-y:auto;
+  background:radial-gradient(ellipse at center, #f5e6c8 0%, #e2cf9f 100%);
 }
-.rules-box h2,.library-box h2{text-align:center;font-size:28px;margin-bottom:8px}
-.rules-box h3,.library-box h3{color:var(--gold);font-size:16px;margin:16px 0 6px}
-.rules-box p,.library-box p{font-size:13px;color:#5c4033;line-height:1.7;margin:4px 0}
-.rules-box .section,.library-box .section{
+.fullscreen-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:18px;padding-bottom:12px;
+  border-bottom:2px solid var(--border-soft);
+}
+.fullscreen-back-btn{
+  background:transparent;border:1px solid var(--border-soft);color:var(--text-dim);
+  padding:8px 18px;border-radius:8px;cursor:pointer;font-size:14px;transition:all .2s;
+  white-space:nowrap;
+}
+.fullscreen-back-btn:hover{border-color:var(--gold);color:var(--gold)}
+.fullscreen-header h2{font-size:30px;color:var(--gold);text-align:center;flex:1;margin:0}
+.header-spacer{width:80px;flex-shrink:0}
+.fullscreen-body{max-width:900px;margin:0 auto}
+.fullscreen-body h2{text-align:center;font-size:26px;margin-bottom:6px;color:var(--gold)}
+.fullscreen-body h3{color:var(--gold);font-size:16px;margin:18px 0 6px}
+.fullscreen-body p,.fullscreen-body li{font-size:13px;color:var(--text);line-height:1.7;margin:3px 0}
+.fullscreen-body .section{
   background:rgba(62,39,35,0.04);border-radius:10px;padding:12px 16px;margin:8px 0;
 }
-.library-char{font-size:18px;font-weight:bold;margin-top:16px;display:flex;align-items:center;gap:8px}
-.library-card-grid{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
-.library-mini-card{
+.fullscreen-body .library-char{font-size:18px;font-weight:bold;margin-top:16px;display:flex;align-items:center;gap:8px}
+.fullscreen-body .library-card-grid{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px}
+.fullscreen-body .library-mini-card{
   background:rgba(62,39,35,0.05);border-radius:8px;padding:6px 10px;
-  font-size:11px;color:#5c4033;border:1px solid rgba(62,39,35,0.12);
+  font-size:11px;color:var(--text);border:1px solid rgba(62,39,35,0.12);
   display:inline-flex;align-items:center;gap:4px;
-}
-.library-btn-close{
-  display:block;margin:16px auto 0;padding:10px 40px;border-radius:10px;
-  border:none;font-size:15px;font-weight:bold;cursor:pointer;
-  background:var(--info);color:var(--text);
 }
 
 /* ====== 选角界面 ====== */
@@ -407,7 +417,7 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
 <div id="lobby-screen" class="screen">
   <div class="lobby-panel">
     <h2>📜 旧日圣契</h2>
-    <button style="position:absolute;top:16px;left:16px;background:transparent;border:1px solid #555;color:var(--text-dim);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:13px" onclick="backToMenu()">← 返回</button>
+    <button class="lobby-back-btn" onclick="backToMenu()">← 返回</button>
     <input id="nickname-input" type="text" placeholder="输入昵称" maxlength="12" value="Player">
     <button class="btn-create" onclick="createRoom()">🏠 创建房间</button>
     <div class="lobby-divider">—— 或 ——</div>
@@ -499,6 +509,27 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
   </div>
 </div>
 
+
+<!-- ====== 游戏规则界面 ====== -->
+<div id="rules-screen" class="screen">
+  <div class="fullscreen-header">
+    <button class="fullscreen-back-btn" onclick="showScreen('menu-screen')">← 返回</button>
+    <h2>📖 游戏规则</h2>
+    <div class="header-spacer"></div>
+  </div>
+  <div class="fullscreen-body" id="rules-content-inline"></div>
+</div>
+
+<!-- ====== 图鉴界面 ====== -->
+<div id="library-screen" class="screen">
+  <div class="fullscreen-header">
+    <button class="fullscreen-back-btn" onclick="showScreen('menu-screen')">← 返回</button>
+    <h2>📚 图鉴</h2>
+    <div class="header-spacer"></div>
+  </div>
+  <div class="fullscreen-body" id="library-content-inline"></div>
+</div>
+
 <!-- ====== 连锁弹窗 ====== -->
 <div class="modal-overlay" id="chain-modal">
   <div class="modal-box">
@@ -515,14 +546,8 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
   <div class="modal-box" id="win-content"></div>
 </div>
 
-<!-- 游戏规则弹窗 -->
-<div class="modal-overlay" id="rules-modal">
-  <div class="modal-box rules-box" id="rules-content"></div>
 </div>
 
-<!-- 图鉴弹窗 -->
-<div class="modal-overlay" id="library-modal">
-  <div class="modal-box library-box" id="library-content"></div>
 </div>
 
 <script src="cards_data.js"></script>
@@ -724,81 +749,54 @@ function backToMenu(){
 }
 
 function showRules(){
-  const rulesHTML = `
-    <h2>📖 游戏规则</h2>
-    <div class="section">
-      <h3>🎯 目标</h3>
-      <p>在你的回合中打出卡牌攻击对手。最后一个存活的玩家获胜。</p>
-    </div>
-    <div class="section">
-      <h3>🔄 回合流程</h3>
+  showScreen('rules-screen');
+  const html = `
+    <div class="section"><h3>🎯 目标</h3><p>在你的回合中打出卡牌攻击对手。最后一个存活的玩家获胜。</p></div>
+    <div class="section"><h3>🔄 回合流程</h3>
       <p>1. 回合开始：自动抽 1 张牌。</p>
       <p>2. 出牌阶段：每回合必须至少出一张牌（出牌权 1 次）。</p>
       <p>3. ⚡ 闪电连锁：打出的牌含 ⚡ 可获得额外出牌次数，可继续出牌或放弃。</p>
-      <p>4. 回合结束：触发 Buff（血怒、祈祷清除、虎形态变回人），切换到下一位存活玩家。</p>
-    </div>
-    <div class="section">
-      <h3>🛡️ 伤害结算优先级</h3>
+      <p>4. 回合结束：触发 Buff（血怒、祈祷清除、虎形态变回人），切换到下一位存活玩家。</p></div>
+    <div class="section"><h3>🛡️ 伤害结算优先级</h3>
       <p>1. 🫥 刺客隐身 → 完全免疫所有伤害</p>
       <p>2. 🗡️ 真实伤害 → 跳过护盾直接扣血</p>
       <p>3. 🔰 绿盾反伤 → 抵消 1 层伤害 + 反弹 1 点真伤</p>
       <p>4. 🛡️ 普通护盾 → 抵消 1 层伤害</p>
-      <p>5. ❤️ 扣血量</p>
-    </div>
-    <div class="section">
-      <h3>📭 牌库耗尽</h3>
-      <p>任何原因需要抽牌但牌库和弃牌堆均为空时，受到 1 点无视护盾的真实伤害。</p>
-    </div>
-    <div class="section">
-      <h3>🐺 兽人变身机制</h3>
-      <p>• 🐻 熊形态：🐾 触发时恢复 1 点生命。形态永久保持。</p>
-      <p>• 🐺 狼形态：🐾 触发时对左右邻位各造成 1 点普通伤害。形态永久保持。</p>
-      <p>• 🐯 虎形态：🐾 触发时对所有敌人造成 3 点真实伤害（无视护盾）。回合结束自动变回人。</p>
-      <p>• 人形态：🐾 触发无效。</p>
-    </div>
-    <div class="section">
-      <h3>⚡ 短休机制</h3>
-      <p>每张 ⚡ 提供 1 次额外出牌次数。弃掉连锁则出牌权归零。</p>
-    </div>
-    <div class="section">
-      <h3>⏱️ 超时机制</h3>
-      <p>• 选角：60 秒</p>
-      <p>• 出牌：100 秒（归零自动打出剩余次数张牌）</p>
-      <p>• 连锁：15 秒（超时自动放弃）</p>
-    </div>
-    <button class="library-btn-close" onclick="document.getElementById('rules-modal').classList.remove('show')">关闭</button>
+      <p>5. ❤️ 扣血量</p></div>
+    <div class="section"><h3>📭 牌库耗尽</h3><p>任何原因需要抽牌但牌库和弃牌堆均为空时，受到 1 点无视护盾的真实伤害。</p></div>
+    <div class="section"><h3>🐺 兽人变身机制</h3>
+      <p>• 🐻 熊：🐾 触发恢复 1 点生命，形态永久保持</p>
+      <p>• 🐺 狼：🐾 触发对左右邻位各 1 点普通伤害，形态永久保持</p>
+      <p>• 🐯 虎：🐾 触发全体敌人 3 点真实伤害，回合结束变回人</p>
+      <p>• 人：🐾 触发无效</p></div>
+    <div class="section"><h3>⚡ 闪电</h3><p>每张 ⚡ 提供 1 次额外出牌次数。弃掉连锁则出牌权归零。</p></div>
+    <div class="section"><h3>⏱️ 超时</h3>
+      <p>选角 60s / 出牌 100s（归零自动清空次数）/ 连锁 15s（超时放弃）</p></div>
   `;
-  document.getElementById('rules-content').innerHTML = rulesHTML;
-  document.getElementById('rules-modal').classList.add('show');
+  document.getElementById('rules-content-inline').innerHTML = html;
 }
 
 function showLibrary(){
+  showScreen('library-screen');
   const html = buildLibraryHTML();
-  document.getElementById('library-content').innerHTML = html;
-  document.getElementById('library-modal').classList.add('show');
+  document.getElementById('library-content-inline').innerHTML = html;
 }
 
 function buildLibraryHTML(){
   const charOrder = ['战士','牧师','法师','坦克','兽人','刺客'];
   const allCards = CARDS_LOCAL;
-  const iconOrder = ['🗡️','🛡️','❤️','🃏','⚡','🔰','💥','🩸','💕','♻️','⛈️','🙏','🐾','🐻','🐺','🐯','👀','🫥'];
-
-  let html = '<h2>📚 图鉴</h2>';
-
+  let html = '';
   for (const char of charOrder) {
     const info = CHARACTERS[char];
     const cards = Object.values(allCards).filter(c => c.character === char);
-    html += `<div class="section" style="border-left:4px solid ${CHAR_COLORS[char]||'#888'}">`;
-    html += `<div class="library-char">${info?info.emoji:''} ${char} <span style="font-size:13px;color:var(--text-dim)">(${cards.length}张牌)</span></div>`;
+    html += '<div class="section" style="border-left:4px solid '+(CHAR_COLORS[char]||'#888')+'">';
+    html += '<div class="library-char">'+(info?info.emoji:'')+' '+char+' <span style="font-size:13px;color:var(--text-dim)">('+cards.length+'张牌)</span></div>';
     html += '<div class="library-card-grid">';
     for (const card of cards) {
-      const efStr = (card.effects||[]).join('');
-      html += `<div class="library-mini-card"><b>${card.name}</b> ${efStr} <span style="color:var(--text-dim);font-size:10px">${card.desc}</span></div>`;
+      html += '<div class="library-mini-card"><b>'+card.name+'</b> '+(card.effects||[]).join('')+' <span style="color:var(--text-dim);font-size:10px">'+card.desc+'</span></div>';
     }
     html += '</div></div>';
   }
-
-  html += '<button class="library-btn-close" onclick="document.getElementById(\'library-modal\').classList.remove(\'show\')">关闭</button>';
   return html;
 }
 
