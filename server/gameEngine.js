@@ -327,21 +327,31 @@ function triggerBeastFormPassive(state, playerId) {
       player.hp = Math.min(player.maxHp, player.hp + 1);
       break;
     case "wolf":
-      // 狼形态被动：对随机一个敌人造成1点伤害
+      // 狼形态被动：对左右邻位各造成1点普通伤害
       {
-        const enemies = s.players.filter((p) => p.id !== playerId && p.isAlive);
-        if (enemies.length > 0) {
-          const target = enemies[Math.floor(Math.random() * enemies.length)];
-          player.hp; // keep reference
-          s.players = dealDamage(s, playerId, target.id, 1, false, 0).players;
+        const alivePlayers = s.players
+          .filter((p) => p.isAlive)
+          .sort((a, b) => a.seatIndex - b.seatIndex);
+        const myIdx = alivePlayers.findIndex((p) => p.id === playerId);
+        if (myIdx !== -1) {
+          const leftIdx = (myIdx - 1 + alivePlayers.length) % alivePlayers.length;
+          const rightIdx = (myIdx + 1) % alivePlayers.length;
+          const targets = [];
+          if (leftIdx !== myIdx) targets.push(alivePlayers[leftIdx].id);
+          if (rightIdx !== myIdx && rightIdx !== leftIdx) targets.push(alivePlayers[rightIdx].id);
+          for (const tid of targets) {
+            s.players = dealDamage(s, playerId, tid, 1, false, 0).players;
+          }
         }
       }
       break;
     case "tiger":
-      // 虎形态被动：抽1张牌
+      // 虎形态被动：对所有敌人造成3点无视护盾的真实伤害
       {
-        const { drawCards } = require("./deckManager");
-        s.players = drawCards(s, playerId, 1).players;
+        const enemies = s.players.filter((p) => p.id !== playerId && p.isAlive);
+        for (const enemy of enemies) {
+          s.players = dealDamage(s, playerId, enemy.id, 3, true, 0).players;
+        }
       }
       break;
   }

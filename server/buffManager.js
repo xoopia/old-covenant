@@ -105,6 +105,11 @@ function onTurnEnd(state, playerId) {
     player._prayerCount = 0;
   }
 
+  // 🐯 虎形态回合结束变回人
+  if (player.beastForm === "tiger") {
+    player.beastForm = null;
+  }
+
   return s;
 }
 

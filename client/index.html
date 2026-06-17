@@ -454,6 +454,8 @@ let myDeckCount = 0;        // 我的牌库剩余数
 let peekedHand = null;      // 刺客窥视：对手手牌
 let peekTargetId = null;    // 刺客窥视：对手ID
 let playsLeft = 0;          // 当前剩余出牌次数（服务端下发）
+let autoPlayMode = false;    // 倒计时归零后自动连打模式
+let prevHand = [];            // 上一帧手牌，用于检测新抽到的牌
 
 // ==================== 手动过牌 ====================
 function manualPassTurn(){
@@ -511,7 +513,7 @@ const CHARACTERS = {
     maxHp:10, color:"#e67e22", emoji:"🐺",
     title:"变形兽人",
     desc:"唯一的变身角色，可在熊🐻/狼🐺/虎🐯三种形态间切换，每种形态有不同的被动效果。",
-    skills:["🐻 熊形态：回合开始+2护盾，回合结束对邻位造成1点伤害","🐺 狼形态：下次攻击额外+1伤害，回合结束对邻位造成1点伤害","🐯 虎形态：回合开始抽1张牌，回合结束对邻位造成1点伤害"],
+    skills:["🐻 熊形态：🐾触发时恢复1点生命","🐺 狼形态：🐾触发时对左右邻位各造成1点伤害","🐯 虎形态：🐾触发时对所有敌人造成3点真实伤害，回合结束变回人"],
     cards:"代表卡牌：狂暴打击🗡️🗡️🐾 / 熊之坚韧❤️❤️🐻 / 狼之突袭🗡️⚡🐺 / 虎之咆哮🐯🐾⚡"
   },
   "刺客":{
@@ -843,12 +845,32 @@ function handleServerMessage(msg){
       break;
 
     case 'YOUR_HAND':
-      myHand = payload.hand || [];
+      {
+      const newHandRaw = payload.hand || [];
+      // 检测新抽到的牌（用于动画）
+      const prevSet = new Set(prevHand);
+      const newCards = newHandRaw.filter(id => !prevSet.has(id));
+      // 记录当前选中的卡牌ID（排序前）
+      const selectedCardId = (selectedCardIdx >= 0 && selectedCardIdx < myHand.length)
+        ? myHand[selectedCardIdx] : null;
+      // 排序手牌
+      myHand = sortHand(newHandRaw);
+      prevHand = [...myHand];
+      // 排序后找回选中卡牌的下标
+      if (selectedCardId !== null) {
+        selectedCardIdx = myHand.indexOf(selectedCardId);
+      } else {
+        selectedCardIdx = -1;
+      }
       myDiscardPile = payload.discardPile || [];
       myDeckCount = payload.deckCount || 0;
       document.getElementById('deck-count').textContent = myDeckCount;
       document.getElementById('discard-count').textContent = myDiscardPile.length;
       updateHandUI();
+      // 抽牌动画
+      if (newCards.length > 0) {
+        animateDrawCards(newCards);
+      }
       // 刺客窥视 step1：展示对手手牌供偷取
       if(payload.peekedHand && payload.peekTargetId){
         peekedHand = payload.peekedHand;
@@ -859,6 +881,7 @@ function handleServerMessage(msg){
       if(payload.giftPickMode){
         showGiftPickerFromOwn();
       }
+      } // end YOUR_HAND block
       break;
 
     case 'DICE_ROLLED':
@@ -1045,7 +1068,7 @@ function renderPlayerCard(p, currentPlayerId){
       <div class="buffs">${(p.buffs||[]).join(' ')}</div>
       ${p.beastForm?`<div class="beast-badge" style="background:${color}33;color:${color};font-weight:bold;font-size:13px;margin-top:4px;display:flex;align-items:center;gap:4px">
         ${p.beastForm==='bear'?'🐻 熊形态':p.beastForm==='wolf'?'🐺 狼形态 '+(p.wolfBuff?'⚡+1伤害':'') :'🐯 虎形态'}
-        <span style="font-size:10px;opacity:0.7">| +2🛡️回合开始 | 对邻位1点伤害回合结束</span>
+        <span style="font-size:10px;opacity:0.7">| ${p.beastForm==='bear'?'🐾触发回1血':p.beastForm==='wolf'?'🐾触发左右各1伤':'🐾触发全场3真伤·回合结束变回人'}</span>
       </div>`:''}
       ${!p.connected?'<div style="color:#ff4444;font-size:11px">⚠️ 断线</div>':''}
       ${isDead?'<div style="color:#ff4444;font-size:12px">💀 阵亡</div>':''}
@@ -1053,10 +1076,101 @@ function renderPlayerCard(p, currentPlayerId){
   `;
 }
 
+// ==================== 手牌排序 ====================
+function getCardSortKey(cardId) {
+  // 图标分类：攻击(0) < 技能Buff(1) < 护盾(2) < 治疗(3) < 抽牌连击(4)
+  const EFFECT_CAT = {
+    '🗡️':0, '⛈️':0, '👀':0, '♻️':0, '💥':0,           // 攻击/进攻
+    '🩸':1, '🙏':1, '🫥':1, '🐾':1, '🐻':1, '🐺':1, '🐯':1, // Buff/变身
+    '🛡️':2, '🔰':2,                                        // 护盾
+    '❤️':3, '💕':3,                                        // 治疗
+    '🃏':4, '⚡':4,                                        // 抽牌/闪电连击
+  };
+  const card = CARDS_LOCAL[cardId];
+  if (!card) return { cat: 9, str: 0, name: cardId };
+  const effects = card.effects || [];
+  let cat = 9;
+  let atk = 0, shd = 0, heal = 0, draw = 0;
+  for (const e of effects) {
+    const c = EFFECT_CAT[e];
+    if (c !== undefined && c < cat) cat = c;
+    if (e === '🗡️') atk++;
+    else if (e === '🛡️' || e === '🔰') shd++;
+    else if (e === '❤️' || e === '💕') heal++;
+    else if (e === '🃏') draw++;
+  }
+  // str 为负数，强度越高值越小（越靠左）
+  const str = -(atk * 1000 + shd * 100 + heal * 10 + draw);
+  return { cat, str, name: card.name };
+}
+
+function sortHand(hand) {
+  if (!hand || hand.length <= 1) return hand ? [...hand] : [];
+  return [...hand].sort((a, b) => {
+    const ka = getCardSortKey(a);
+    const kb = getCardSortKey(b);
+    if (ka.cat !== kb.cat) return ka.cat - kb.cat;
+    if (ka.str !== kb.str) return ka.str - kb.str;
+    return ka.name.localeCompare(kb.name);
+  });
+}
+
+// ==================== 抽牌动画 ====================
+function animateDrawCards(cardIds) {
+  const deckEl = document.querySelector('.deck-stack');
+  if (!deckEl) return;
+  const deckRect = deckEl.getBoundingClientRect();
+  const handArea = document.getElementById('hand-area');
+  const handRect = handArea.getBoundingClientRect();
+  // 目标：手牌区域中心偏下
+  const targetX = handRect.left + handRect.width / 2;
+  const targetY = handRect.top + handRect.height * 0.55;
+
+  cardIds.forEach((cardId, i) => {
+    const card = CARDS_LOCAL[cardId] || { name: cardId, effects: [], desc: '', character: '' };
+    const color = CHAR_COLORS[card.character] || '#888';
+    const floatCard = document.createElement('div');
+    floatCard.className = 'card float-draw';
+    floatCard.style.cssText = `
+      position: fixed; left: ${deckRect.left + deckRect.width/2 - 50}px;
+      top: ${deckRect.top}px; width: 100px; height: 145px; z-index: 200;
+      border-color: ${color}; pointer-events: none;
+      transition: all 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    `;
+    floatCard.innerHTML = `
+      <div class="card-char-tag" style="color:${color}">${card.character||''}</div>
+      <div class="card-name">${card.name}</div>
+      <div class="card-icons">${(card.effects||[]).join('')}</div>
+      <div class="card-desc">${card.desc}</div>
+    `;
+    document.body.appendChild(floatCard);
+
+    // 第一帧后飞向手牌区域
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const spreadX = targetX + (i - (cardIds.length - 1) / 2) * 70;
+        floatCard.style.left = `${spreadX - 50}px`;
+        floatCard.style.top = `${targetY - 72}px`;
+        floatCard.style.transform = 'scale(1.08)';
+        floatCard.style.opacity = '0.92';
+      });
+    });
+
+    // 落地后淡出移除
+    setTimeout(() => {
+      floatCard.style.transition = 'opacity 0.2s ease-out';
+      floatCard.style.opacity = '0';
+      setTimeout(() => floatCard.remove(), 220);
+    }, 430 + i * 80);
+  });
+}
+
 function updateHandUI(){
   const handArea = document.getElementById('hand-area');
   if(!myHand || myHand.length === 0){
     handArea.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:20px">手牌为空</div>';
+    prevHand = [];
     return;
   }
 
@@ -1333,7 +1447,7 @@ const CHAR_SKILL_ICONS = {
   '牧师': [['💕','生命祝福：永久提升血量上限 +1'],['♻️','生命交换：与一名玩家互换当前血量']],
   '法师': [['⛈️','雷暴诅咒：目标每回合受 1 点真实伤害，持续至法师下回合'],['🙏','祈祷：每打出 2 张牌自动抽 1 张']],
   '坦克': [['💥','破盾波：清除全场敌人的所有普通护盾'],['🔰','荆棘装甲：获得反伤绿盾，受伤时反弹 1 点真实伤害']],
-  '兽人': [['🐾','野兽本能：根据当前形态触发被动效果'],['🐻','熊形态：+2 护盾 / 回合结束对邻位伤害'],['🐺','狼形态：下次攻击 +1 伤害 / 回合结束对邻位伤害'],['🐯','虎形态：抽 1 张牌 / 回合结束对邻位伤害']],
+  '兽人': [['🐾','野兽本能：触发当前形态的被动效果'],['🐻','熊形态：🐾触发时恢复1点生命'],['🐺','狼形态：🐾触发时对左右邻位各造成1点伤害'],['🐯','虎形态：🐾触发时对所有敌人造成3点真实伤害（无视护盾），回合结束变回人']],
   '刺客': [['👀','窥视：查看对手手牌，偷 1 张并还 1 张'],['🫥','相位偏移：隐身一回合，完全免疫所有伤害']],
 };
 function updateIconLegend(){
@@ -1389,20 +1503,40 @@ function updateCountdown(){
   const num = document.getElementById('cd-num');
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
 
+  // 不在自己回合也不在连锁 → 隐藏倒计时，清除自动模式
   if(!isMyTurn && !isMyChain){
     box.style.display = 'none';
     if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+    autoPlayMode = false;
     return;
   }
+
+  // 自动连打模式：只要还有出牌权、手牌不为空、不在连锁/换牌等待，就立刻再出一张
+  if(autoPlayMode && isMyTurn && !isMyChain && !gameState?.awaitingChain
+     && !gameState?._pendingStealPick && !gameState?._pendingGiftPick){
+    if(playsLeft > 0 && myHand.length > 0){
+      autoPlayAnyCard();
+      return;
+    } else {
+      // 出牌权用完或没手牌 → 结束自动模式，过牌
+      autoPlayMode = false;
+      box.style.display = 'none';
+      if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
+      send('END_TURN', {playerId: myPlayerId});
+      return;
+    }
+  }
+
   // 出牌权已用尽 → 不重启倒计时
   if(playsLeft <= 0 && !isMyChain){
     box.style.display = 'none';
     if(countdownTimer){clearInterval(countdownTimer);countdownTimer=null;}
     return;
   }
+
   box.style.display = 'flex';
   if(!countdownTimer){
-    countdownValue = isMyChain ? 15 : 60;
+    countdownValue = isMyChain ? 15 : 100;
     num.textContent = countdownValue;
     box.classList.remove('urgent');
     countdownTimer = setInterval(()=>{
@@ -1415,7 +1549,9 @@ function updateCountdown(){
         countdownTimer = null;
         if(isMyChain){
           send('CHAIN_CONTINUE', { playerId: myPlayerId, continue: false });
-        } else if(playsLeft > 0){
+        } else if(playsLeft > 0 && myHand.length > 0){
+          // 倒计时归零 → 进入自动连打模式，根据剩余出牌次数打出对应张数
+          autoPlayMode = true;
           autoPlayAnyCard();
         } else {
           // 已出过牌 → 自动过牌

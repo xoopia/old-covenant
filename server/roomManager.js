@@ -16,7 +16,7 @@ const { onTurnStart, onTurnEnd } = require("./buffManager");
 // ========== 超时配置 (ms) ==========
 const TIMEOUTS = {
   PICK_CHARACTER: 30000,
-  PLAY_CARD: 60000,
+  PLAY_CARD: 110000,
   CHAIN: 15000,
   DISCONNECT: 90000,
   GAME_OVER: 90000,
