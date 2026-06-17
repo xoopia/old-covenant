@@ -319,10 +319,21 @@ body{
 .winner-char{font-size:80px;margin:16px 0}
 .winner-text{font-size:36px;color:var(--gold);font-weight:bold}
 
-/* 提示 */
-.tooltip{
-  position:fixed;background:rgba(0,0,0,0.9);color:#fff;padding:8px 14px;
-  border-radius:8px;font-size:13px;pointer-events:none;z-index:200;
+/* 浮动伤害/治疗/护盾数字 */
+.float-num{
+  position:fixed;pointer-events:none;z-index:250;font-weight:900;
+  font-size:22px;text-shadow:0 2px 8px rgba(0,0,0,0.8);
+  animation:floatUp 1.2s ease-out forwards;
+  white-space:nowrap;
+}
+.float-num.damage{color:#ff3333}
+.float-num.heal{color:#33ff55}
+.float-num.shield{color:#ffdd44}
+.float-num.green-shield{color:#44ffaa}
+@keyframes floatUp{
+  0%{opacity:1;transform:translateY(0) scale(1)}
+  30%{opacity:1;transform:translateY(-18px) scale(1.25)}
+  100%{opacity:0;transform:translateY(-60px) scale(0.7)}
 }
 </style>
 </head>
@@ -467,6 +478,7 @@ let peekTargetId = null;    // 刺客窥视：对手ID
 let playsLeft = 0;          // 当前剩余出牌次数（服务端下发）
 let autoPlayMode = false;    // 倒计时归零后自动连打模式
 let prevHand = [];            // 上一帧手牌，用于检测新抽到的牌
+let prevPlayerSnapshot = {};  // 上一帧玩家状态，用于浮动伤害数字
 
 // ==================== 手动过牌 ====================
 function manualPassTurn(){
@@ -838,6 +850,8 @@ function handleServerMessage(msg){
       break;
 
     case 'STATE_SYNC':
+      // 浮动数字对比（在更新 gameState 之前）
+      prevPlayerSnapshot = diffAndFloat(prevPlayerSnapshot, payload) || prevPlayerSnapshot;
       gameState = payload;
       // 大厅阶段：刷新玩家列表
       if (gameState.phase === 'WAITING' || gameState.phase === 'ROLLING') {
@@ -956,6 +970,7 @@ function handleServerMessage(msg){
     case 'GAME_STARTED':
       stopPickCountdown();
       showScreen('game-screen');
+      prevPlayerSnapshot = {};  // 重置浮动数字快照
       // 延迟一帧确保 screen 已 visible，再 resize canvas
       setTimeout(() => { if (typeof fxResize === 'function') fxResize(); }, 50);
       document.getElementById('game-room-code').textContent = myRoomCode;
@@ -1073,6 +1088,53 @@ function updateGameUI(){
   if(gameState.phase === 'GAME_OVER'){
     showGameOverFromState(players);
   }
+}
+
+// ==================== 浮动伤害/治疗/护盾数字 ====================
+function spawnFloatingNum(seatIndex, text, cls) {
+  // 找到对应座位的玩家卡片
+  const card = document.querySelector('.player-card[data-seat="' + seatIndex + '"]');
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  const el = document.createElement('div');
+  el.className = 'float-num ' + cls;
+  el.textContent = text;
+  el.style.left = (rect.left + rect.width/2 - 30) + 'px';
+  el.style.top = (rect.top + 4) + 'px';
+  document.body.appendChild(el);
+  // 动画结束后移除
+  setTimeout(() => el.remove(), 1250);
+}
+
+function diffAndFloat(prev, now) {
+  if (!now || !now.players) return;
+  for (const p of now.players) {
+    const seat = p.seatIndex != null ? p.seatIndex : -1;
+    const old = prev[seat] || { hp: p.hp, shield: p.shield || 0, greenShield: p.greenShield || 0 };
+    // HP变化（扣除还是回复）
+    const hpDelta = (p.hp || 0) - (old.hp || 0);
+    if (hpDelta < 0) {
+      spawnFloatingNum(seat, hpDelta.toString(), 'damage');
+    } else if (hpDelta > 0) {
+      spawnFloatingNum(seat, '+' + hpDelta, 'heal');
+    }
+    // 普通护盾变化
+    const sdDelta = (p.shield || 0) - (old.shield || 0);
+    if (sdDelta > 0) {
+      spawnFloatingNum(seat, '🛡️+' + sdDelta, 'shield');
+    }
+    // 绿盾变化
+    const gsDelta = (p.greenShield || 0) - (old.greenShield || 0);
+    if (gsDelta > 0) {
+      spawnFloatingNum(seat, '🔰+' + gsDelta, 'green-shield');
+    }
+  }
+  // 更新快照
+  const snap = {};
+  for (const p of now.players) {
+    snap[p.seatIndex] = { hp: p.hp, shield: p.shield || 0, greenShield: p.greenShield || 0 };
+  }
+  return snap;
 }
 
 function renderBoard(players, currentPlayerId){

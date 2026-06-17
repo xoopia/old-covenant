@@ -11,6 +11,20 @@
 const { generateRoomCode, deepClone, shuffle } = require("./util");
 const { CHARACTERS, createInitialGameState, resolve, resolveChain, skipChain, checkWinCondition, getNextAlivePlayer, resolveStealPick, resolveGiftPick } = require("./gameEngine");
 const { drawCards } = require("./deckManager");
+const CARDS = require("./cards.json");
+
+/** 将卡牌效果列表转为图标计数字符串，如 "🗡️x2 🛡️x1 ❤️x1" */
+function formatCardIcons(cardId) {
+  const card = CARDS[cardId];
+  if (!card || !card.effects) return cardId;
+  const counts = {};
+  for (const e of card.effects) {
+    counts[e] = (counts[e] || 0) + 1;
+  }
+  // 按攻击→护盾→治疗→抽牌→闪电→特殊 排序
+  const order = ['🗡️','🛡️','❤️','🃏','⚡','🔰','💥','🩸','💕','♻️','⛈️','🙏','🐾','🐻','🐺','🐯','👀','🫥'];
+  return order.filter(o => counts[o]).map(o => counts[o] > 1 ? `${o}x${counts[o]}` : o).join(' ') || cardId;
+}
 const { onTurnStart, onTurnEnd } = require("./buffManager");
 
 // ========== 超时配置 (ms) ==========
@@ -289,15 +303,17 @@ class Room {
     if (gs.awaitingChain) {
       // 连锁出牌
       this.gameState = resolveChain(gs, playerId, cardId, resolvedTargets);
+      const chainIconStr = formatCardIcons(cardId);
       this.gameState.gameLogs.push(
-        `⚡ ${player.nickname}(${player.character}) 连锁出牌: ${cardId}`
+        `⚡ ${player.nickname}(${player.character}) 连锁: ${chainIconStr}`
       );
       isChainCard = true;
     } else {
       // 正常出牌
       this.gameState = resolve(gs, playerId, cardId, resolvedTargets);
+      const iconStr = formatCardIcons(cardId);
       this.gameState.gameLogs.push(
-        `🎴 ${player.nickname}(${player.character}) 打出: ${cardId}`
+        `🎴 ${player.nickname}(${player.character}) → ${iconStr}`
       );
     }
 
@@ -452,7 +468,7 @@ class Room {
       if (!cardId) cardId = player.hand[0];
       const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
       const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
-      this.gameState.gameLogs.push(`⏩ 自动出牌: ${cardId}`);
+      this.gameState.gameLogs.push(`⏩ 自动出牌: ${formatCardIcons(cardId)}`);
       const playRes = this.playCard(playerId, cardId, target);
       if (!playRes.success) return playRes;
       // 出牌触发了连锁 → 不自动过牌，等玩家操作
