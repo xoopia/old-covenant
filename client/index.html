@@ -154,8 +154,9 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
   cursor:pointer;transition:all .2s;position:relative;overflow:hidden;
   flex-shrink:0;
 }
-.card:hover{width:120px;height:170px;border-color:var(--gold);z-index:10;box-shadow:0 8px 28px rgba(80,45,20,0.25)}
+.card:hover{z-index:10;transform:scale(1.15);border-color:var(--gold);box-shadow:0 8px 28px rgba(80,45,20,0.25)}
 .card.selected{transform:translateY(-26px);border-color:var(--gold);box-shadow:0 0 24px rgba(139,105,20,0.5)}
+.card.selected:hover{transform:translateY(-26px) scale(1.15)}
 .card.unplayable{opacity:0.5;cursor:not-allowed}
 .card .card-name{font-size:12px;font-weight:bold;margin-bottom:5px;text-align:center}
 .card .card-icons{font-size:22px;display:flex;flex-wrap:wrap;justify-content:center;gap:2px}
