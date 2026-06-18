@@ -8,7 +8,7 @@ const { deepClone, shuffle } = require("./util");
 const CARDS = require("./cards.json");
 
 /** 手牌上限 */
-const MAX_HAND_SIZE = 10;
+const MAX_HAND_SIZE = 12;
 
 /**
  * 根据角色ID获取该角色的全部卡牌ID列表

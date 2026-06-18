@@ -978,7 +978,10 @@ function updatePickScreen(payload){
 // ==================== 游戏操作 ====================
 function doPlayCard(cardIdx, targets){
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
-  if(!isMyTurn && !isMyChain) return;
+  if(!isMyTurn && !isMyChain){
+    showError('现在不是你的回合，请等待');
+    return;
+  }
   const cardId = myHand[cardIdx];
   if(!cardId) return;
 
@@ -1576,8 +1579,14 @@ function onCardClick(idx){
 
 function confirmPlayCard(){
   const canAct = isMyTurn || (gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId);
-  if(!canAct) return;
-  if(selectedCardIdx < 0) return;
+  if(!canAct){
+    showError('现在不是你的回合，无法出牌');
+    return;
+  }
+  if(selectedCardIdx < 0){
+    showError('请先选择一张手牌');
+    return;
+  }
   const targets = selectedTargets;
 
   doPlayCard(selectedCardIdx, targets);

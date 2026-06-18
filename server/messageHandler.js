@@ -183,6 +183,7 @@ function handleMessage(ws, rawData) {
         room.timers["chainTimeout"] = setTimeout(() => {
           room.handleTimeout("CHAIN");
           syncState(room);
+          resetPlayTimeout(room);
         }, TIMEOUTS.CHAIN);
       } else {
         // 重置出牌超时

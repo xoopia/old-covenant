@@ -441,13 +441,51 @@ class Room {
     if (!gs) return { error: "SERVER_ERROR" };
 
     const currentPlayerId = gs.turnOrder[gs.currentPlayerIndex];
-    if (currentPlayerId !== playerId) return { error: "NOT_YOUR_TURN" };
+    // 回合已推进（如服务端超时自动过牌）→ 幂等返回成功
+    if (currentPlayerId !== playerId) {
+      const playerInTurn = gs.turnOrder.includes(playerId);
+      if (playerInTurn) return { success: true, alreadyEnded: true };
+      return { error: "NOT_YOUR_TURN" };
+    }
     if (gs.awaitingChain) return { error: "INVALID_REQUEST", msg: "请先处理连锁" };
     if (gs._pendingStealPick || gs._pendingGiftPick) return { error: "INVALID_REQUEST", msg: "请先完成换牌选择" };
 
     if (!gs._hasPlayed) {
-      return this._forcePlayCard(playerId);
+      return this._doForcePlayThenEndTurn(playerId);
     }
+
+    return this._advanceTurn(playerId);
+  }
+
+  // 强制出牌然后推进回合（不递归，避免状态污染）
+  _doForcePlayThenEndTurn(playerId) {
+    const player = this.gameState.players.find(p => p.id === playerId);
+    if (!player || !player.isAlive || player.hand.length === 0) {
+      this.gameState._hasPlayed = true;
+    } else {
+      let cardId = player.hand.find(cid => {
+        const c = CARDS[cid];
+        return c && !(c.effects || []).some(e => ['🗡️','♻️','⛈️','👀'].includes(e));
+      });
+      if (!cardId) cardId = player.hand[0];
+      const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
+      const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
+      const autoTargets = enemies.length > 0 ? [enemies[0].id] : [];
+      this.gameState.gameLogs.push("⏩ 自动 " + formatCardPlayLog(cardId, this.gameState, autoTargets));
+      const playRes = this.playCard(playerId, cardId, target);
+      if (!playRes.success) return playRes;
+      // 触发了连锁/换牌 → 不强行推进，等客户端操作
+      if (this.gameState.awaitingChain || this.gameState._pendingStealPick || this.gameState._pendingGiftPick) {
+        return { success: true, awaitingChain: this.gameState.awaitingChain };
+      }
+    }
+    return this._advanceTurn(playerId);
+  }
+
+  // 纯推进回合（不检查 _hasPlayed，不强制出牌）
+  _advanceTurn(playerId) {
+    const gs = this.gameState;
+    const currentPlayerId = gs.turnOrder[gs.currentPlayerIndex];
 
     this.gameState = onTurnEnd(this.gameState, currentPlayerId);
 
@@ -481,31 +519,7 @@ class Room {
       return { success: true, gameOver: true, winner: result.winner };
     }
     return { success: true };
-  }
-
-  _forcePlayCard(playerId) {
-    const player = this.gameState.players.find(p => p.id === playerId);
-    if (!player || !player.isAlive || player.hand.length === 0) {
-      this.gameState._hasPlayed = true;
-    } else {
-      let cardId = player.hand.find(cid => {
-        const c = CARDS[cid];
-        return c && !(c.effects || []).some(e => ['🗡️','♻️','⛈️','👀'].includes(e));
-      });
-      if (!cardId) cardId = player.hand[0];
-      const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
-      const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
-      const autoTargets = enemies.length > 0 ? [enemies[0].id] : [];
-      this.gameState.gameLogs.push("⏩ 自动 " + formatCardPlayLog(cardId, this.gameState, autoTargets));
-      const playRes = this.playCard(playerId, cardId, target);
-      if (!playRes.success) return playRes;
-      if (this.gameState.awaitingChain) return { success: true, awaitingChain: true };
-      if (this.gameState._pendingStealPick || this.gameState._pendingGiftPick) return { success: true };
-    }
-    return this.endTurn(playerId);
-  }
-
-  // ===== 超时 =====
+  }  // ===== 超时 =====
 
   handleTimeout(action) {
     if (action === "PLAY_CARD" || action === "END_TURN") {
