@@ -571,7 +571,18 @@ let selectedTargets = [];  // 当前选中的目标
 let isMyTurn = false;
 let wasMyChain = false;
 let actionPending = false;   // 防双重发送锁
-let lastTurnPlayer = null;   // 上一帧回合人 (检测回合切换)
+let actionPendingTimer = null; // 锁超时释放 (8s)
+function lockAction() {
+  if (actionPending) return false;
+  actionPending = true;
+  if (actionPendingTimer) clearTimeout(actionPendingTimer);
+  actionPendingTimer = setTimeout(() => { actionPending = false; }, 8000);
+  return true;
+}
+function unlockAction() {
+  actionPending = false;
+  if (actionPendingTimer) { clearTimeout(actionPendingTimer); actionPendingTimer = null; }
+}
 let countdownTimer = null;
 let countdownValue = 60;
 let pickCountdownTimer = null;
@@ -591,10 +602,9 @@ let pendingFloatDiff = null; // {old, now} — 在renderBoard之后执行
 
 // ==================== 手动过牌 ====================
 function manualPassTurn(){
-  if(actionPending){ console.log('[LOCK] pass blocked'); return; }
+  if(!lockAction()){ console.log('[LOCK] pass blocked'); return; }
   selectedCardIdx = -1;
   selectedTargets = [];
-  actionPending = true;
   send('END_TURN', {playerId: myPlayerId});
   sfxPass();
   updateHandUI();
@@ -995,15 +1005,15 @@ function updatePickScreen(payload){
 
 // ==================== 游戏操作 ====================
 function doPlayCard(cardIdx, targets){
-  if(actionPending){ console.log('[LOCK] play blocked - action pending'); return; }
+  if(!lockAction()){ console.log('[LOCK] play blocked'); return; }
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
   if(!isMyTurn && !isMyChain){
+    unlockAction();
     showError('现在不是你的回合，请等待');
     return;
   }
   const cardId = myHand[cardIdx];
-  if(!cardId) return;
-  actionPending = true;
+  if(!cardId){ unlockAction(); return; }
 
   // 触发打出特效 + 音效
   const me = (gameState?.players||[]).find(p=>p.id===myPlayerId);
@@ -1037,8 +1047,13 @@ function endTurn(){
 }
 
 function chainContinue(wantContinue){
-  // 跳过连锁
   document.getElementById('chain-modal').classList.remove('show');
+  if(wantContinue){
+    // 继续连锁：不发送消息，玩家选一张牌后通过 doPlayCard 发送 CHAIN_CONTINUE
+    return;
+  }
+  // 跳过连锁
+  if(!lockAction()) return;
   send('CHAIN_CONTINUE', { playerId: myPlayerId, continue: false });
   selectedCardIdx = -1;
   selectedTargets = [];
@@ -1198,6 +1213,7 @@ function handleServerMessage(msg){
     case 'GAME_STARTED':
       stopPickCountdown();
       showScreen('game-screen');
+      unlockAction();           // 清除残留锁
       prevPlayerSnapshot = {};  // 重置浮动数字快照
       wasMyChain = false;       // 重置连锁状态
       // 延迟一帧确保 screen 已 visible，再 resize canvas
@@ -1229,6 +1245,7 @@ function handleServerMessage(msg){
       break;
 
     case 'ROOM_DISMISSED':
+      unlockAction();
       alert(payload.msg || '房间已解散');
       myPlayerId = null;
       myRoomCode = null;
@@ -1319,15 +1336,13 @@ function updateGameUI(){
   }
 
   // 安全解锁：STATE_SYNC 到达 → 释放 actionPending
+  unlockAction();
   // 回合已切走 → 清理选中状态
-  if (actionPending) {
-    actionPending = false;
-    if (!isMyTurn && !isMyChain) {
-      selectedCardIdx = -1;
-      selectedTargets = [];
-      if(countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
-      document.getElementById('countdown-box').style.display = 'none';
-    }
+  if (!isMyTurn && !isMyChain) {
+    selectedCardIdx = -1;
+    selectedTargets = [];
+    if(countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
+    document.getElementById('countdown-box').style.display = 'none';
   }
 
   // 渲染面板
@@ -1753,12 +1768,11 @@ function sendGiftCard(cardId){
 }
 
 function autoPlayAnyCard(){
-  if(actionPending) return; // 锁中不自动出牌
+  if(!lockAction()) return; // 锁中不自动出牌
   // 超时/强制出牌：手牌中随机选一张打出
-  if(!myHand || myHand.length === 0) return;
+  if(!myHand || myHand.length === 0){ unlockAction(); return; }
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
-  if(!isMyTurn && !isMyChain) return;
-  actionPending = true;
+  if(!isMyTurn && !isMyChain){ unlockAction(); return; }
 
   let idx = myHand.findIndex(cid=>{
     const c = CARDS_LOCAL[cid];

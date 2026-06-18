@@ -448,7 +448,8 @@ class Room {
   // ===== 结束回合 =====
 
   endTurn(playerId) {
-    if (this.phase !== "PLAYING") return { error: "ROOM_ALREADY_STARTED" };
+    return this._guarded(() => {
+      if (this.phase !== "PLAYING") return { error: "ROOM_ALREADY_STARTED" };
     const gs = this.gameState;
     if (!gs) return { error: "SERVER_ERROR" };
 
@@ -467,7 +468,7 @@ class Room {
     }
 
     return this._advanceTurn(playerId);
-  }
+    }); }
 
   // 强制出牌然后推进回合（不递归，避免状态污染）
   _doForcePlayThenEndTurn(playerId) {
