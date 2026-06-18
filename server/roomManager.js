@@ -166,12 +166,14 @@ class Room {
     }
   }
 
-  // 广播当前状态给所有已连接玩家（用于断线/踢人等非游戏操作的同步）
+  // 广播当前状态给所有已连接玩家（含手牌，用于断线/链超时/回合推进后的同步）
   _broadcastState() {
     const pub = this.getPublicState();
     for (const p of this.players) {
       if (p.ws && p.connected) {
         this._send(p.ws, "STATE_SYNC", pub);
+        const priv = this.getPrivateState(p.id);
+        if (priv) this._send(p.ws, "YOUR_HAND", priv);
       }
     }
   }

@@ -260,8 +260,19 @@ function handleMessage(ws, rawData) {
         });
       }
 
-      resetPlayTimeout(room);
       syncState(room);
+
+      // 过牌时强制出牌触发了连锁 → 设置连锁超时
+      if (result.awaitingChain) {
+        if (room.timers["chainTimeout"]) clearTimeout(room.timers["chainTimeout"]);
+        room.timers["chainTimeout"] = setTimeout(() => {
+          room.handleTimeout("CHAIN");
+          syncState(room);
+          resetPlayTimeout(room);
+        }, TIMEOUTS.CHAIN);
+      } else {
+        resetPlayTimeout(room);
+      }
       break;
     }
 
