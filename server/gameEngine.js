@@ -68,8 +68,8 @@ function dealDamage(state, sourceId, targetId, damage, isTrueDamage = false, dep
   const target = s.players.find((p) => p.id === targetId);
   if (!target || !target.isAlive) return s;
 
-  // 第一层：🫥 刺客隐身 → 完全免疫
-  if (target.buffs.includes("🫥")) return s;
+  // 第一层：🫥 刺客隐身 → 完全免疫（SYSTEM伤害穿透隐身）
+  if (target.buffs.includes("🫥") && sourceId !== "SYSTEM") return s;
 
   // 真实伤害 → 跳过护盾，直接扣血
   if (isTrueDamage) {
@@ -142,6 +142,7 @@ const CHARACTERS = {
   "坦克": { id: "坦克", maxHp: 10, color: "#408a5c", emoji: "🛡️" },
   "兽人": { id: "兽人", maxHp: 10, color: "#c4752a", emoji: "🐺" },
   "刺客": { id: "刺客", maxHp: 10, color: "#7b4ea0", emoji: "🗡️" },
+  "圣战士": { id: "圣战士", maxHp: 10, color: "#FFD700", emoji: "⚔️" },
 };
 
 // ========== 效果处理器映射表 ==========
@@ -200,6 +201,18 @@ const EffectHandlers = {
   "🐻": (state, sourceId) => setBeastForm(state, sourceId, "bear"),
   "🐺": (state, sourceId) => setBeastForm(state, sourceId, "wolf"),
   "🐯": (state, sourceId) => setBeastForm(state, sourceId, "tiger"),
+
+  // ===== 圣战士专属 =====
+  "⚖️": (state, sourceId, targetList) => {
+    if (!targetList || targetList.length === 0) return state;
+    const { addBuff } = require("./buffManager");
+    let s = dealDamage(state, sourceId, targetList[0], 2, false, 0);
+    s = addBuff(s, targetList[0], "⚖️");
+    s.gameLogs = s.gameLogs || [];
+    const target = s.players.find(p => p.id === targetList[0]);
+    s.gameLogs.push("⚖️ 审判印记施加于 " + (target ? (target.nickname || target.character) : targetList[0]) + "，其每打出一张牌受到1点真实伤害");
+    return s;
+  },
 
   // ===== 刺客专属 =====
   "👀": (state, sourceId, targetList) => {
@@ -380,7 +393,7 @@ function triggerBeastFormPassive(state, playerId) {
 
 /**
  * 根据效果类型获取目标
- * 🗡️/♻️/⛈️/👀 需要指定目标
+ * 🗡️/♻️/⛈️/👀/⚖️ 需要指定目标
  * ❤️/🛡️/🃏/🩸/💕/🙏/💥/🔰/🐾/🐻/🐺/🐯/🫥 为自身效果
  */
 function getTargetForEffect(targetList, effect, effectIndex) {
@@ -447,6 +460,10 @@ function applySingleCard(state, action) {
       tempState.gameLogs.push('🩸 血怒：攻击牌额外+1伤害');
     }
   }
+
+  // ⚖️ 审判印记：出牌玩家若有印记，每张牌受1点SYSTEM真实伤害
+  const { onCardPlayed } = require("./buffManager");
+  tempState = onCardPlayed(tempState, action.sourceId);
 
   // 单张卡牌全部结算后，将卡牌移入弃牌堆
   const { discardCard } = require("./deckManager");

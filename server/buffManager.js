@@ -24,7 +24,12 @@ const BUFF_DEFS = {
   "🫥": {
     name: "隐身",
     trigger: "selfTurnStart",
-    desc: "自身回合开始时移除（持续一回合免伤）",
+    desc: "自身回合开始时移除（持续一回合免伤，SYSTEM伤害穿透）",
+  },
+  "⚖️": {
+    name: "审判印记",
+    trigger: "onCardPlayed",
+    desc: "每打出一张牌受到1点SYSTEM真实伤害，回合结束时移除，不可叠加",
   },
 };
 
@@ -104,11 +109,34 @@ function onTurnEnd(state, playerId) {
     player._prayerCount = 0;
   }
 
+  // ⚖️ 审判印记：持有者回合结束时清除
+  if (player.buffs.includes("⚖️")) {
+    player.buffs = player.buffs.filter((b) => b !== "⚖️");
+    s.gameLogs = s.gameLogs || [];
+    s.gameLogs.push("⚖️ " + (player.nickname || player.character || playerId) + " 审判印记消失");
+  }
+
   // 🐯 虎形态回合结束变回人
   if (player.beastForm === "tiger") {
     player.beastForm = null;
   }
 
+  return s;
+}
+
+/**
+ * ⚖️ 审判印记：出牌玩家若有印记，每打1张牌受1点SYSTEM真实伤害
+ * 在 applySingleCard 中每次出牌后调用
+ */
+function onCardPlayed(state, playerId) {
+  let s = deepClone(state);
+  const player = s.players.find(p => p.id === playerId);
+  if (!player || !player.isAlive || !player.buffs.includes("⚖️")) return s;
+
+  const { dealDamage } = require("./gameEngine");
+  s = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
+  s.gameLogs = s.gameLogs || [];
+  s.gameLogs.push("⚖️ 审判印记触发：" + (player.nickname || player.character || playerId) + " 受到1点真实伤害");
   return s;
 }
 
@@ -160,6 +188,7 @@ module.exports = {
   removeBuff,
   onTurnStart,
   onTurnEnd,
+  onCardPlayed,
   checkPrayerDraw,
   setCurseCaster,
   clearPersistentBuffsAfterDeath,

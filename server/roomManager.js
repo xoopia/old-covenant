@@ -81,6 +81,15 @@ class Room {
     this.timers = {};
     this.heartbeatMisses = {};
     this.createdAt = Date.now();
+    this._lock = false;       // 操作互斥锁，防止信号干扰
+  }
+
+  // ===== 操作锁 =====
+  _acquire() { if (this._lock) return false; this._lock = true; return true; }
+  _release() { this._lock = false; }
+  _guarded(fn) {
+    if (!this._acquire()) return { error: "SERVER_BUSY", msg: "操作进行中，请稍后重试" };
+    try { return fn(); } finally { this._release(); }
   }
 
   // ===== 玩家管理 =====
@@ -323,6 +332,10 @@ class Room {
   // ===== 出牌 =====
 
   playCard(playerId, cardId, targets) {
+    return this._guarded(() => this._playCardDirect(playerId, cardId, targets));
+  }
+  // 无锁版本，内部调用（如 _doForcePlayThenEndTurn）用
+  _playCardDirect(playerId, cardId, targets) {
     if (this.phase !== "PLAYING") return { error: "ROOM_ALREADY_STARTED" };
     const gs = this.gameState;
     if (!gs) return { error: "SERVER_ERROR" };
@@ -376,16 +389,17 @@ class Room {
   // ===== 连锁继续/停止 =====
 
   chainContinue(playerId, wantContinue, cardId, targets) {
-    if (!this.gameState || !this.gameState.awaitingChain) {
-      return { error: "INVALID_REQUEST", msg: "不在连锁状态" };
-    }
-    if (this.gameState.chainPlayerId !== playerId) {
-      return { error: "NOT_YOUR_TURN" };
-    }
-
-    if (wantContinue && cardId) {
-      return this.playCard(playerId, cardId, targets);
-    } else {
+    return this._guarded(() => {
+      if (!this.gameState || !this.gameState.awaitingChain) {
+        return { error: "INVALID_REQUEST", msg: "不在连锁状态" };
+      }
+      if (this.gameState.chainPlayerId !== playerId) {
+        return { error: "NOT_YOUR_TURN" };
+      }
+      if (wantContinue && cardId) {
+        return this._playCardDirect(playerId, cardId, targets);
+      }
+      // 放弃连锁
       this.gameState = skipChain(this.gameState);
       this.gameState.gameLogs.push("⏭️ 放弃连锁");
       const result = checkWinCondition(this.gameState);
@@ -394,14 +408,14 @@ class Room {
         return { success: true, gameOver: true, winner: result.winner };
       }
       return { success: true };
-    }
-  }
+    }); }
 
   // ===== 刺客换牌 =====
 
   pickStealCard(playerId, cardId) {
-    if (!this.gameState) return { error: "SERVER_ERROR" };
-    const gs = this.gameState;
+    return this._guarded(() => {
+      if (!this.gameState) return { error: "SERVER_ERROR" };
+      const gs = this.gameState;
     if (!gs._pendingStealPick) return { error: "INVALID_REQUEST", msg: "不在偷牌阶段" };
     if (gs._giftSourceId !== playerId) return { error: "NOT_YOUR_TURN" };
 
@@ -411,27 +425,25 @@ class Room {
     this.gameState = resolveStealPick(gs, cardId);
     this.gameState.gameLogs.push("👀 窥视：偷取 1 张牌，等待选牌归还");
     return { success: true, phase: "gift" };
-  }
+    }); } // close _guarded / pickStealCard
 
   pickGiftCard(playerId, cardId) {
-    if (!this.gameState) return { error: "SERVER_ERROR" };
-    const gs = this.gameState;
-    if (!gs._pendingGiftPick) return { error: "INVALID_REQUEST", msg: "不在还牌阶段" };
-    if (gs._giftSourceId !== playerId) return { error: "NOT_YOUR_TURN" };
-
-    const player = gs.players.find(p => p.id === playerId);
-    if (!player || !player.hand.includes(cardId)) return { error: "INVALID_CARD" };
-
-    this.gameState = resolveGiftPick(gs, cardId);
-    this.gameState.gameLogs.push("👀 窥视完成：交还 1 张牌");
-
-    const result = checkWinCondition(this.gameState);
-    if (result.gameOver) {
-      this.endGame(result.winner);
-      return { success: true, gameOver: true, winner: result.winner };
-    }
-    return { success: true };
-  }
+    return this._guarded(() => {
+      if (!this.gameState) return { error: "SERVER_ERROR" };
+      const gs = this.gameState;
+      if (!gs._pendingGiftPick) return { error: "INVALID_REQUEST", msg: "不在还牌阶段" };
+      if (gs._giftSourceId !== playerId) return { error: "NOT_YOUR_TURN" };
+      const player = gs.players.find(p => p.id === playerId);
+      if (!player || !player.hand.includes(cardId)) return { error: "INVALID_CARD" };
+      this.gameState = resolveGiftPick(gs, cardId);
+      this.gameState.gameLogs.push("👀 窥视完成：交还 1 张牌");
+      const result = checkWinCondition(this.gameState);
+      if (result.gameOver) {
+        this.endGame(result.winner);
+        return { success: true, gameOver: true, winner: result.winner };
+      }
+      return { success: true };
+    }); }
 
   // ===== 结束回合 =====
 
@@ -465,14 +477,14 @@ class Room {
     } else {
       let cardId = player.hand.find(cid => {
         const c = CARDS[cid];
-        return c && !(c.effects || []).some(e => ['🗡️','♻️','⛈️','👀'].includes(e));
+        return c && !(c.effects || []).some(e => ['🗡️','♻️','⛈️','👀','⚖️'].includes(e));
       });
       if (!cardId) cardId = player.hand[0];
       const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
       const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
       const autoTargets = enemies.length > 0 ? [enemies[0].id] : [];
       this.gameState.gameLogs.push("⏩ 自动 " + formatCardPlayLog(cardId, this.gameState, autoTargets));
-      const playRes = this.playCard(playerId, cardId, target);
+      const playRes = this._playCardDirect(playerId, cardId, target);
       if (!playRes.success) return playRes;
       // 触发了连锁/换牌 → 不强行推进，等客户端操作
       if (this.gameState.awaitingChain || this.gameState._pendingStealPick || this.gameState._pendingGiftPick) {
@@ -548,6 +560,8 @@ class Room {
       if (this.gameState && this.gameState.awaitingChain) {
         this.gameState = skipChain(this.gameState);
         this.gameState.gameLogs.push("⏰ 连锁超时，自动终止");
+        const curId = this.gameState.turnOrder[this.gameState.currentPlayerIndex];
+        this._advanceTurn(curId);
         return { success: true };
       }
     } else if (action === "PICK_CHARACTER") {

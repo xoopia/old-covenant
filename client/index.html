@@ -570,6 +570,8 @@ let selectedCardIdx = -1;  // 当前选中的手牌下标
 let selectedTargets = [];  // 当前选中的目标
 let isMyTurn = false;
 let wasMyChain = false;
+let actionPending = false;   // 防双重发送锁
+let lastTurnPlayer = null;   // 上一帧回合人 (检测回合切换)
 let countdownTimer = null;
 let countdownValue = 60;
 let pickCountdownTimer = null;
@@ -589,8 +591,10 @@ let pendingFloatDiff = null; // {old, now} — 在renderBoard之后执行
 
 // ==================== 手动过牌 ====================
 function manualPassTurn(){
+  if(actionPending){ console.log('[LOCK] pass blocked'); return; }
   selectedCardIdx = -1;
   selectedTargets = [];
+  actionPending = true;
   send('END_TURN', {playerId: myPlayerId});
   sfxPass();
   updateHandUI();
@@ -656,12 +660,20 @@ const CHARACTERS = {
     desc:"高爆发刺客，隐身免疫伤害、偷看并交换对手手牌。",
     skills:["🫥 隐身：直到下回合开始完全免疫所有伤害","👀 窥视：查看并交换一名玩家的全部手牌"],
     cards:"代表卡牌：暗杀🗡️🗡️ / 终结技🗡️🗡️🗡️🗡️ / 窥视👀 / 相位偏移🫥"
+  },
+  "圣战士":{
+    maxHp:10, color:"#FFD700", emoji:"⚔️",
+    title:"圣光骑士",
+    desc:"攻守兼备的正义守护者，以审判印记制裁冒进者。",
+    skills:["⚖️ 审判：对目标造成2点伤害并施加审判印记（被标记玩家每打出一张牌受1点真实伤害，印记在持有者回合结束消失）"],
+    cards:"代表卡牌：圣裁🗡️🗡️🗡️❤️ / 圣盾打击🗡️🗡️🛡️ / 圣佑🛡️🛡️❤️ / 审判之锤⚖️⚡"
   }
 };
 
 const CHAR_COLORS = {
   "战士":"#b3403a","牧师":"#c4941a","法师":"#3a6fa8",
-  "坦克":"#408a5c","兽人":"#c4752a","刺客":"#7b4ea0"
+  "坦克":"#408a5c","兽人":"#c4752a","刺客":"#7b4ea0",
+  "圣战士":"#FFD700"
 };
 
 // ==================== WebSocket ====================
@@ -764,7 +776,7 @@ function showRules(){
       <p>3. ⚡ 闪电连锁：打出的牌含 ⚡ 可获得额外出牌次数，可继续出牌或放弃。</p>
       <p>4. 回合结束：结算 Buff（血怒移除、祈祷清除、虎形态变回人），切换到下一位存活玩家。</p></div>
     <div class="section"><h3>🛡️ 伤害结算优先级</h3>
-      <p>1. 🫥 刺客隐身 → 完全免疫所有伤害</p>
+      <p>1. 🫥 刺客隐身 → 免疫敌方伤害（SYSTEM 伤害穿透）</p>
       <p>2. 🗡️ 真实伤害 → 跳过护盾直接扣血</p>
       <p>3. 🔰 绿盾反伤 → 抵消 1 层伤害 + 反弹 1 点真伤</p>
       <p>4. 🛡️ 普通护盾 → 抵消 1 层伤害</p>
@@ -776,6 +788,11 @@ function showRules(){
       <p>• 🐯 虎：🐾 触发全体敌人 2 点真实伤害，回合结束变回人</p>
       <p>• 人：🐾 触发无效</p></div>
     <div class="section"><h3>⚡ 闪电</h3><p>每张 ⚡ 提供 1 次额外出牌次数。弃掉连锁则出牌权归零。</p></div>
+    <div class="section"><h3>⚖️ 审判印记</h3>
+      <p>• 圣战士 ⚖️ 对目标造成 2 点伤害并施加审判印记</p>
+      <p>• 被标记者每打出 1 张牌受 1 点 SYSTEM 真实伤害</p>
+      <p>• 按牌算（非图标），⚡连锁牌也会触发</p>
+      <p>• 不可叠加，印记在持有者回合结束时消失</p></div>
     <div class="section"><h3>⏱️ 超时</h3>
       <p>选角 60s / 出牌 100s（归零自动清空次数）/ 连锁 15s（超时放弃）</p></div>
   `;
@@ -789,7 +806,7 @@ function showLibrary(){
 }
 
 function buildLibraryHTML(){
-  const charOrder = ['战士','牧师','法师','坦克','兽人','刺客'];
+  const charOrder = ['战士','牧师','法师','坦克','兽人','刺客','圣战士'];
   const allCards = CARDS_LOCAL;
   let html = '';
   for (const char of charOrder) {
@@ -978,6 +995,7 @@ function updatePickScreen(payload){
 
 // ==================== 游戏操作 ====================
 function doPlayCard(cardIdx, targets){
+  if(actionPending){ console.log('[LOCK] play blocked - action pending'); return; }
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
   if(!isMyTurn && !isMyChain){
     showError('现在不是你的回合，请等待');
@@ -985,6 +1003,7 @@ function doPlayCard(cardIdx, targets){
   }
   const cardId = myHand[cardIdx];
   if(!cardId) return;
+  actionPending = true;
 
   // 触发打出特效 + 音效
   const me = (gameState?.players||[]).find(p=>p.id===myPlayerId);
@@ -1299,6 +1318,18 @@ function updateGameUI(){
     playsLeft = 0;
   }
 
+  // 安全解锁：STATE_SYNC 到达 → 释放 actionPending
+  // 回合已切走 → 清理选中状态
+  if (actionPending) {
+    actionPending = false;
+    if (!isMyTurn && !isMyChain) {
+      selectedCardIdx = -1;
+      selectedTargets = [];
+      if(countdownTimer){ clearInterval(countdownTimer); countdownTimer = null; }
+      document.getElementById('countdown-box').style.display = 'none';
+    }
+  }
+
   // 渲染面板
   renderBoard(players, currentPlayerId);
   flushFloatDiffs();         // DOM 已就绪，开始浮动数字
@@ -1377,7 +1408,8 @@ const BUFF_TOOLTIPS = {
   '🩸':'血怒：本回合打出的攻击牌额外+1伤害（每张牌+1）',
   '⛈️':'雷暴诅咒：每回合受1点真实伤害',
   '🙏':'祈祷：每出2张牌自动抽1张',
-  '🫥':'隐身：完全免疫所有伤害',
+  '🫥':'隐身：完全免疫所有伤害（SYSTEM伤害穿透）',
+  '⚖️':'审判印记：每打出1张牌受1点SYSTEM真实伤害，回合结束时移除',
 };
 function renderBuffs(buffs){
   if(!buffs||buffs.length===0) return '';
@@ -1611,7 +1643,7 @@ function selectTarget(seatIndex){
   if(!canAct || selectedCardIdx < 0) return;
   const card = CARDS_LOCAL[myHand[selectedCardIdx]];
   if(!card) return;
-  const needsTarget = (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  const needsTarget = (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀','⚖️'].includes(e));
   if(!needsTarget) return;
 
   // 切换目标 — click again to deselect
@@ -1721,14 +1753,16 @@ function sendGiftCard(cardId){
 }
 
 function autoPlayAnyCard(){
+  if(actionPending) return; // 锁中不自动出牌
   // 超时/强制出牌：手牌中随机选一张打出
   if(!myHand || myHand.length === 0) return;
   const isMyChain = gameState?.awaitingChain && gameState.chainPlayerId === myPlayerId;
   if(!isMyTurn && !isMyChain) return;
+  actionPending = true;
 
   let idx = myHand.findIndex(cid=>{
     const c = CARDS_LOCAL[cid];
-    return c && !(c.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+    return c && !(c.effects||[]).some(e=>['🗡️','♻️','⛈️','👀','⚖️'].includes(e));
   });
   if(idx < 0) idx = 0;
 
@@ -1737,7 +1771,7 @@ function autoPlayAnyCard(){
 
   // 需要目标的牌，自动选一个存活敌人
   let targets = [];
-  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀','⚖️'].includes(e));
   if(needsTarget){
     const enemy = (gameState?.players||[]).find(p=>p.id!==myPlayerId&&p.isAlive);
     if(enemy) targets = [enemy.seatIndex];
@@ -1786,7 +1820,7 @@ function updateActionBar(){
 
   const hasCard = selectedCardIdx >= 0;
   const card = hasCard ? CARDS_LOCAL[myHand[selectedCardIdx]] : null;
-  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀','⚖️'].includes(e));
   const ready = hasCard && (!needsTarget || selectedTargets.length >= 1);
 
   playBtn.disabled = !ready;
@@ -1836,6 +1870,7 @@ const CHAR_SKILL_ICONS = {
   '坦克': [['💥','破盾波：清除全场敌人的所有普通护盾'],['🔰','荆棘装甲：获得反伤绿盾，受伤时反弹 1 点真实伤害']],
   '兽人': [['🐾','野兽本能：触发当前形态的被动效果'],['🐻','熊形态：🐾触发时恢复1点生命'],['🐺','狼形态：🐾触发时对左右邻位各造成1点伤害'],['🐯','虎形态：🐾触发时对所有敌人造成2点真实伤害（无视护盾），回合结束变回人']],
   '刺客': [['👀','窥视：查看对手手牌，偷 1 张并还 1 张'],['🫥','相位偏移：隐身一回合，完全免疫所有伤害']],
+  '圣战士': [['⚖️','审判：2点伤害+施加审判印记，被标记者每打出1张牌受1点SYSTEM真伤，印记在持有者回合结束时消失']],
 };
 function updateIconLegend(){
   const el = document.getElementById('icon-legend');
@@ -1996,10 +2031,11 @@ const FX_COLORS = {
   mage:{p:'#3a6fa8',s:'#7fadd8',g:'rgba(55,110,170,0.6)',b:'#2c5a8a'},
   tank:{p:'#408a5c',s:'#7abb90',g:'rgba(60,135,90,0.6)',b:'#307040'},
   orc:{p:'#c4752a',s:'#e6a568',g:'rgba(190,115,40,0.6)',b:'#a06020'},
-  assassin:{p:'#7b4ea0',s:'#b895d0',g:'rgba(120,75,160,0.6)',b:'#604080'}
+  assassin:{p:'#7b4ea0',s:'#b895d0',g:'rgba(120,75,160,0.6)',b:'#604080'},
+  paladin:{p:'#FFD700',s:'#FFF8DC',g:'rgba(255,215,0,0.6)',b:'#DAA520'}
 };
-const CHAR_FX_MAP = {'战士':'warrior','牧师':'priest','法师':'mage','坦克':'tank','兽人':'orc','刺客':'assassin'};
-const SKILL_EFFECTS = new Set(['⚡','🩸','💕','♻️','⛈️','🙏','💥','🔰','🐾','🐻','🐺','🐯','👀','🫥']);
+const CHAR_FX_MAP = {'战士':'warrior','牧师':'priest','法师':'mage','坦克':'tank','兽人':'orc','刺客':'assassin','圣战士':'paladin'};
+const SKILL_EFFECTS = new Set(['⚡','🩸','💕','♻️','⛈️','🙏','💥','🔰','🐾','🐻','🐺','🐯','👀','🫥','⚖️']);
 const fxRand=(a,b)=>Math.random()*(b-a)+a;
 
 function fxEmit(x,y,count,c1,c2,speed,life,szMin,szMax){
@@ -2044,6 +2080,12 @@ const FX = {
       for(let i=0;i<16;i++){let a=fxRand(-0.3,0.3)+(i/16)*Math.PI*2;fxParticles.push({x:x+Math.cos(a)*6,y:y+Math.sin(a)*6,vx:Math.cos(a)*fxRand(4,10),vy:Math.sin(a)*fxRand(4,10),life:fxRand(0.2,0.7),maxLife:0.7,size:fxRand(2,5),color:'#ddbbff',gravity:0.02,drag:0.94,decay:0.032,glow:true});}},
     skill:(x,y)=>{let c=FX_COLORS.assassin;fxEmit(x,y,70,'#9944ff','#7733cc',9,1.5,3,12);fxRing(x,y,8,'#9944ff',7,1.4);fxRing(x,y,0,'#7733cc',5,1.6);fxFlash(x,y,'rgba(140,60,255,0.8)',115,0.85);fxScreenShake=8;
       for(let i=0;i<22;i++){let a=fxRand(0,Math.PI*2),d=fxRand(25,80);fxParticles.push({x:x+Math.cos(a)*d,y:y+Math.sin(a)*d,vx:Math.cos(a+fxRand(-0.4,0.4))*fxRand(0.4,2),vy:Math.sin(a+fxRand(-0.4,0.4))*fxRand(0.4,2),life:fxRand(0.4,1.1),maxLife:1.1,size:fxRand(6,14),color:'rgba(160,80,255,0.55)',gravity:0,drag:0.985,decay:0.013,glow:true});}}
+  },
+  paladin:{
+    base:(x,y)=>{let c=FX_COLORS.paladin;fxEmit(x,y,48,'#FFD700','#FFF8DC',6,1.0,3,8);fxRing(x,y,8,c.p,5,1.0);fxFlash(x,y,c.g,80,0.6);
+      for(let i=0;i<18;i++){let a=fxRand(0,Math.PI*2);fxParticles.push({x:x+fxRand(-6,6),y:y+fxRand(-6,6),vx:Math.cos(a)*fxRand(2,7),vy:Math.sin(a)*fxRand(2,7)-1,life:fxRand(0.3,0.8),maxLife:0.8,size:fxRand(2,6),color:Math.random()>0.5?'#FFD700':'#FFF8DC',gravity:0.03,drag:0.96,decay:0.024,glow:true});}},
+    skill:(x,y)=>{let c=FX_COLORS.paladin;fxEmit(x,y,80,'#FFD700','#FFF8DC',10,1.6,4,13);fxRing(x,y,8,'#FFD700',9,1.4);fxRing(x,y,0,'#FFF8DC',5,1.7);fxFlash(x,y,'rgba(255,215,0,0.85)',130,0.9);fxScreenShake=9;
+      for(let i=0;i<22;i++){let a=(i/22)*Math.PI*2;fxParticles.push({x:x+Math.cos(a)*fxRand(8,40),y:y+Math.sin(a)*fxRand(8,40),vx:Math.cos(a)*fxRand(1,4),vy:Math.sin(a)*fxRand(1,4),life:fxRand(0.4,1.1),maxLife:1.1,size:fxRand(3,8),color:Math.random()>0.5?'#FFD700':'#FFF8DC',gravity:0,drag:0.98,decay:0.014,glow:true});}}
   }
 };
 
@@ -2133,7 +2175,8 @@ const SFX_MELODIES = {
   mage:{base:[330,440,554],skill:[262,330,440,554,660]},
   tank:{base:[392,330,262],skill:[196,262,330,392,523]},
   orc:{base:[349,440,523],skill:[262,349,440,523,698]},
-  assassin:{base:[587,698,880],skill:[440,587,698,880,1175]}
+  assassin:{base:[587,698,880],skill:[440,587,698,880,1175]},
+  paladin:{base:[494,588,698],skill:[370,494,588,698,988]}
 };
 
 function sfxCardPlay(character, isSkill){
