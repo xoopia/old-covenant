@@ -817,8 +817,23 @@ function toggleFullscreen(){
 }
 
 function showError(msg){
+  console.error('[ERROR]', msg);
   document.getElementById('lobby-error').textContent = msg;
   setTimeout(()=>{document.getElementById('lobby-error').textContent='';},4000);
+  // 游戏中用浮动toast显示错误
+  showToast(msg, 'error');
+}
+
+function showToast(msg, type){
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:300;'+
+    'padding:10px 24px;border-radius:10px;font-size:15px;font-weight:bold;'+
+    'pointer-events:none;transition:all 0.4s;'+
+    (type==='error'?'background:#c0392b;color:#fff;':'background:#27ae60;color:#fff;');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => { toast.style.opacity='0'; }, 3000);
+  setTimeout(() => { toast.remove(); }, 3500);
 }
 
 function createRoom(){

@@ -60,14 +60,17 @@ function formatCardPlayLog(cardId, gameState, targets) {
 
 class Room {
   /**
+/**
    * @param {string} code 房间码
    * @param {Function} destroyFn 销毁房间回调 (roomCode => void)
    * @param {Function} sendFn 发送消息回调 (ws, type, payload => void)
+   * @param {Function} unmapFn 解除玩家映射回调 (playerId => void)
    */
-  constructor(code, destroyFn, sendFn) {
+  constructor(code, destroyFn, sendFn, unmapFn) {
     this.code = code;
     this._destroy = destroyFn;
     this._send = sendFn;
+    this._unmap = unmapFn;
     this.phase = "WAITING";
     this.players = [];
     this.maxPlayers = 4;
@@ -147,7 +150,20 @@ class Room {
         this.handleAbandon(playerId);
       }, TIMEOUTS.DISCONNECT);
     } else {
+      this._unmap && this._unmap(playerId);
       this.removePlayer(playerId);
+      // 广播更新后的玩家列表
+      this._broadcastState();
+    }
+  }
+
+  // 广播当前状态给所有已连接玩家（用于断线/踢人等非游戏操作的同步）
+  _broadcastState() {
+    const pub = this.getPublicState();
+    for (const p of this.players) {
+      if (p.ws && p.connected) {
+        this._send(p.ws, "STATE_SYNC", pub);
+      }
     }
   }
 
@@ -166,11 +182,27 @@ class Room {
   }
 
   handleAbandon(playerId) {
+    // 超时弃权：标记死亡，若为当前回合则推进
     if (this.gameState) {
       const gsPlayer = this.gameState.players.find(p => p.id === playerId);
       if (gsPlayer) {
         gsPlayer.isAlive = false;
         gsPlayer.connected = false;
+      }
+      // 如果弃权者是当前回合人，自动推进回合
+      const turnOrder = this.gameState.turnOrder;
+      const curIdx = this.gameState.currentPlayerIndex;
+      if (turnOrder && turnOrder[curIdx] === playerId) {
+        this.gameState.gameLogs.push("⏰ " + (gsPlayer ? (gsPlayer.nickname || gsPlayer.character) : playerId) + " 断线弃权");
+        this.gameState.awaitingChain = false;
+        this.gameState.chainPlayerId = "";
+        this.gameState._pendingStealPick = false;
+        this.gameState._pendingGiftPick = false;
+        if (!this.gameState._hasPlayed) {
+          this.gameState._hasPlayed = true;
+        }
+        const endResult = this.endTurn(playerId);
+        if (endResult && endResult.success) return;
       }
     }
     const player = this.getPlayer(playerId);
@@ -588,9 +620,18 @@ class RoomManager {
   createRoom() {
     const code = generateRoomCode();
     if (this.rooms[code]) return this.createRoom();
-    const room = new Room(code, (c) => this.destroyRoom(c), this._send);
+    const room = new Room(
+      code,
+      (c) => this.destroyRoom(c),
+      this._send,
+      (pid) => { delete this.playerRoomMap[pid]; }
+    );
     this.rooms[code] = room;
     return room;
+  }
+
+  unmapPlayer(playerId) {
+    delete this.playerRoomMap[playerId];
   }
 
   getRoom(code) {
