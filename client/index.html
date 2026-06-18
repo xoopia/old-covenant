@@ -1706,10 +1706,20 @@ function autoPlayAnyCard(){
   if(idx < 0) idx = 0;
 
   const cardId = myHand[idx];
+  const card = CARDS_LOCAL[cardId];
+
+  // 需要目标的牌，自动选一个存活敌人
+  let targets = [];
+  const needsTarget = card && (card.effects||[]).some(e=>['🗡️','♻️','⛈️','👀'].includes(e));
+  if(needsTarget){
+    const enemy = (gameState?.players||[]).find(p=>p.id!==myPlayerId&&p.isAlive);
+    if(enemy) targets = [enemy.seatIndex];
+  }
+
   if(isMyChain){
-    send('CHAIN_CONTINUE', {playerId:myPlayerId, continue:true, cardId:cardId, targets:[]});
+    send('CHAIN_CONTINUE', {playerId:myPlayerId, continue:true, cardId:cardId, targets:targets});
   } else {
-    send('PLAY_CARD', {playerId:myPlayerId, cardId:cardId, targets:[]});
+    send('PLAY_CARD', {playerId:myPlayerId, cardId:cardId, targets:targets});
   }
   selectedCardIdx = -1;
   selectedTargets = [];

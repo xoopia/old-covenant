@@ -439,7 +439,7 @@ function applySingleCard(state, action) {
   if (hasAttack && bp && bp.buffs.includes('🩸') && bp.isAlive) {
     const tgtList = action.targets || [];
     const tgtPlayer = tgtList.length > 0
-      ? tempState.players.find(p => p.seatIndex === tgtList[0] && p.isAlive)
+      ? tempState.players.find(p => p.id === tgtList[0] && p.isAlive)
       : tempState.players.find(p => p.id !== action.sourceId && p.isAlive);
     if (tgtPlayer) {
       tempState = dealDamage(tempState, action.sourceId, tgtPlayer.id, 1, true, 0);
