@@ -111,7 +111,7 @@ const CARDS_LOCAL = {
   "w18":{"id":"w18","name":"袭扰","character":"战士","effects":["🗡️","❤️"],"desc":"1点伤害，1点治疗"},
   "w19":{"id":"w19","name":"双重连击","character":"战士","effects":["⚡","⚡"],"desc":"双闪电"},
   "w2":{"id":"w2","name":"猛击","character":"战士","effects":["🗡️","🗡️"],"desc":"造成2点伤害"},
-  "w20":{"id":"w20","name":"血怒","character":"战士","effects":["🩸","⚡","⚡"],"desc":"获得血怒(攻击牌额外+1伤害)，双闪电"},
+  "w20":{"id":"w20","name":"血怒","character":"战士","effects":["🩸","⚡"],"desc":"获得血怒(攻击牌额外+1伤害)，闪电"},
   "w3":{"id":"w3","name":"猛击","character":"战士","effects":["🗡️","🗡️"],"desc":"造成2点伤害"},
   "w4":{"id":"w4","name":"猛击","character":"战士","effects":["🗡️","🗡️"],"desc":"造成2点伤害"},
   "w5":{"id":"w5","name":"护盾","character":"战士","effects":["🛡️","🛡️"],"desc":"获得2层护盾"},
