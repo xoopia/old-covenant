@@ -32,8 +32,8 @@ const TIMEOUTS = {
   CHAIN: 15000,
   DISCONNECT: 90000,
   GAME_OVER: 90000,
-  HEARTBEAT: 5000,
-  HEARTBEAT_MAX_MISS: 3,
+  HEARTBEAT: 8000,
+  HEARTBEAT_MAX_MISS: 5,
 };
 
 /** 生成战斗日志 */
@@ -701,11 +701,14 @@ class RoomManager {
     setInterval(() => {
       const now = Date.now();
       for (const [code, room] of Object.entries(this.rooms)) {
+        // 不清理活跃游戏中的房间
+        if (room.phase === "PLAYING" || room.phase === "DEALING" || room.phase === "PICKING") continue;
+        // 空闲房间 > 1小时且全部断线 → 清理
         if (now - room.createdAt > 3600000 && room.players.every(p => !p.connected)) {
           this.destroyRoom(code);
         }
       }
-    }, 60000);
+    }, 120000);
   }
 }
 
