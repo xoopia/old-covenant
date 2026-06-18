@@ -1246,6 +1246,8 @@ function handleServerMessage(msg){
       break;
 
     case 'ERROR':
+      unlockAction(); // 错误响应 → 释放动作锁
+      if(payload.msg === '操作进行中，请稍后重试') break; // 静默消化互斥错误
       showError(payload.msg || '未知错误');
       break;
 
