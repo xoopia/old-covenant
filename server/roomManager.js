@@ -425,6 +425,10 @@ class Room {
     const gs = this.gameState;
     if (!gs) return { error: "SERVER_ERROR" };
 
+    // 防御：currentPlayerIndex 越界时自动修复
+    if (gs.currentPlayerIndex < 0 || gs.currentPlayerIndex >= gs.turnOrder.length) {
+      gs.currentPlayerIndex = 0;
+    }
     const currentPlayerId = gs.turnOrder[gs.currentPlayerIndex];
     // 回合已推进 → 幂等返回成功
     if (currentPlayerId !== playerId) {
@@ -470,9 +474,9 @@ class Room {
 
   // 推进到下一个玩家回合
   _advanceTurn() {
-    const gs = this.gameState;
-    const curId = gs.turnOrder[gs.currentPlayerIndex];
+    const curId = this.gameState.turnOrder[this.gameState.currentPlayerIndex];
 
+    // 1. 结算回合结束效果（血怒消失/审判印记消失等，可能造成死亡）
     this.gameState = onTurnEnd(this.gameState, curId);
 
     let result = checkWinCondition(this.gameState);
@@ -481,21 +485,44 @@ class Room {
       return { success: true, gameOver: true, winner: result.winner };
     }
 
+    // 2. 重建 turnOrder 为仅存活玩家（按 seatIndex 排序），防止死玩家占位累积
+    const alivePlayers = this.gameState.players.filter(p => p.isAlive).sort((a, b) => a.seatIndex - b.seatIndex);
+    this.gameState.turnOrder = alivePlayers.map(p => p.id);
+
+    // 3. 找下一个存活玩家（在当前座位之后）
     const curPlayer = this.gameState.players.find(p => p.id === curId);
-    if (curPlayer) {
+    if (!curPlayer || !curPlayer.isAlive) {
+      // 当前玩家已死亡 → 从 turnOrder 头部开始
+      this.gameState.currentPlayerIndex = 0;
+    } else {
       const nextPlayer = getNextAlivePlayer(this.gameState, curPlayer.seatIndex);
       if (nextPlayer) {
         this.gameState.currentPlayerIndex = this.gameState.turnOrder.indexOf(nextPlayer.id);
-        this.gameState.turnCount++;
-        this.gameState._playsRemaining = 1;
-        this.gameState._hasPlayed = false;
-        this.gameState = drawCards(this.gameState, nextPlayer.id, 1);
-        this.gameState = onTurnStart(this.gameState, nextPlayer.id);
-        this.gameState.gameLogs.push(
-          "🔄 轮到 " + (nextPlayer.nickname || nextPlayer.character) +
-          " (" + nextPlayer.character + " 座位" + nextPlayer.seatIndex + ")"
-        );
       }
+    }
+
+    // 4. 安全检查：确保下标有效
+    if (this.gameState.currentPlayerIndex < 0 ||
+        this.gameState.currentPlayerIndex >= this.gameState.turnOrder.length) {
+      this.gameState.currentPlayerIndex = 0;
+    }
+    if (this.gameState.turnOrder.length === 0) {
+      return { error: "SERVER_ERROR", msg: "无存活玩家" };
+    }
+
+    // 5. 新回合开始
+    const nextPlayerId = this.gameState.turnOrder[this.gameState.currentPlayerIndex];
+    const nextPlayer = this.gameState.players.find(p => p.id === nextPlayerId);
+    if (nextPlayer && nextPlayer.isAlive) {
+      this.gameState.turnCount++;
+      this.gameState._playsRemaining = 1;
+      this.gameState._hasPlayed = false;
+      this.gameState = drawCards(this.gameState, nextPlayer.id, 1);
+      this.gameState = onTurnStart(this.gameState, nextPlayer.id);
+      this.gameState.gameLogs.push(
+        "🔄 轮到 " + (nextPlayer.nickname || nextPlayer.character) +
+        " (" + nextPlayer.character + " 座位" + nextPlayer.seatIndex + ")"
+      );
     }
 
     result = checkWinCondition(this.gameState);
