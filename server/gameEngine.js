@@ -347,7 +347,7 @@ function setBeastForm(state, playerId, form) {
 }
 
 function triggerBeastFormPassive(state, playerId) {
-  const s = deepClone(state);
+  let s = deepClone(state);
   const player = s.players.find((p) => p.id === playerId);
   if (!player || !player.beastForm || !player.isAlive) return s;
 

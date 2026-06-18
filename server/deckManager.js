@@ -42,7 +42,7 @@ function initDeck(characterId) {
  * 新抽的牌标记 isNewThisTurn = true（本回合可用）
  */
 function drawCards(state, playerId, count = 1) {
-  const s = deepClone(state);
+  let s = deepClone(state);
   let player = s.players.find((p) => p.id === playerId);
   if (!player || !player.isAlive) return s;
 
