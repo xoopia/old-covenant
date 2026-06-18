@@ -8,8 +8,8 @@ const { deepClone } = require("./util");
 const BUFF_DEFS = {
   "🩸": {
     name: "血怒",
-    trigger: "selfTurnEnd",
-    desc: "自身回合结束时，对所有敌人造成1点伤害",
+    trigger: "duringTurn",
+    desc: "本回合打出的攻击牌额外+1伤害（每张牌+1），回合结束时移除",
   },
   "⛈️": {
     name: "雷暴诅咒",
@@ -66,7 +66,7 @@ function onTurnStart(state, playerId) {
   // ⛈️ 雷暴诅咒：每个玩家回合开始时，诅咒目标受到1点真实伤害（无视护盾）
   for (const p of s.players) {
     if (p.buffs.includes("⛈️") && p.isAlive) {
-      s.players = dealDamage(s, "SYSTEM", p.id, 1, true, 0).players;
+      s = dealDamage(s, "SYSTEM", p.id, 1, true, 0);
     }
   }
 
@@ -82,7 +82,7 @@ function onTurnStart(state, playerId) {
 }
 
 /**
- * 🩸 血怒：回合结束时对所有敌人造成1点伤害
+ * 🩸 血怒：回合结束时移除（本回合内攻击牌伤害+1）
  */
 function onTurnEnd(state, playerId) {
   let s = deepClone(state);
@@ -91,12 +91,11 @@ function onTurnEnd(state, playerId) {
 
   const { dealDamage } = require("./gameEngine");
 
-  // 🩸 血怒
+  // 🩸 血怒：回合结束移除
   if (player.buffs.includes("🩸")) {
-    const enemies = s.players.filter((p) => p.id !== playerId && p.isAlive);
-    for (const enemy of enemies) {
-      s.players = dealDamage(s, playerId, enemy.id, 1, false, 0).players;
-    }
+    player.buffs = player.buffs.filter((b) => b !== "🩸");
+    s.gameLogs = s.gameLogs || [];
+    s.gameLogs.push("🩸 血怒效果结束");
   }
 
   // 🙏 祈祷：持续一回合，回合结束时清除

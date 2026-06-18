@@ -618,7 +618,7 @@ const CHARACTERS = {
     maxHp:10, color:"#b3403a", emoji:"⚔️",
     title:"重装战士",
     desc:"攻守兼备的近战专家，擅长持续的盾牌格挡与蛮力输出。",
-    skills:["🩸 血怒：回合结束时对所有敌人造成1点伤害"],
+    skills:["🩸 血怒：本回合打出的攻击牌额外+1伤害（每张牌+1），回合结束移除"],
     cards:"代表卡牌：猛击🗡️🗡️ / 护盾🛡️🛡️ / 狂风斩🗡️🗡️🗡️⚡ / 血怒🩸⚡⚡"
   },
   "牧师":{
@@ -646,7 +646,7 @@ const CHARACTERS = {
     maxHp:10, color:"#c4752a", emoji:"🐺",
     title:"变形兽人",
     desc:"唯一的变身角色，可在熊🐻/狼🐺/虎🐯三种形态间切换，每种形态有不同的被动效果。",
-    skills:["🐻 熊形态：🐾触发时恢复1点生命","🐺 狼形态：🐾触发时对左右邻位各造成1点伤害","🐯 虎形态：🐾触发时对所有敌人造成3点真实伤害，回合结束变回人"],
+    skills:["🐻 熊形态：🐾触发时恢复1点生命","🐺 狼形态：🐾触发时对左右邻位各造成1点伤害","🐯 虎形态：🐾触发时对所有敌人造成2点真实伤害，回合结束变回人"],
     cards:"代表卡牌：狂暴打击🗡️🗡️🐾 / 熊之坚韧❤️❤️🐻 / 狼之突袭🗡️⚡🐺 / 虎之咆哮🐯🐾⚡"
   },
   "刺客":{
@@ -730,7 +730,8 @@ function renderLobbyPlayers(players){
     let cls = 'player-badge';
     if(p.id === myPlayerId) cls += ' you';
     if(i === 0) cls += ' host';
-    const label = p.id === myPlayerId ? '👤 你' : `👤 玩家${i+1}`;
+    const nick = p.nickname || ('玩家'+(i+1));
+    const label = p.id === myPlayerId ? '👤 ' + nick + '(你)' : '👤 ' + nick;
     const host = i === 0 ? ' 🏠' : '';
     return `<span class="${cls}">${label}${host}</span>`;
   }).join('');
@@ -760,7 +761,7 @@ function showRules(){
       <p>1. 回合开始：自动抽 1 张牌。</p>
       <p>2. 出牌阶段：每回合必须至少出一张牌（出牌权 1 次）。</p>
       <p>3. ⚡ 闪电连锁：打出的牌含 ⚡ 可获得额外出牌次数，可继续出牌或放弃。</p>
-      <p>4. 回合结束：触发 Buff（血怒、祈祷清除、虎形态变回人），切换到下一位存活玩家。</p></div>
+      <p>4. 回合结束：结算 Buff（血怒移除、祈祷清除、虎形态变回人），切换到下一位存活玩家。</p></div>
     <div class="section"><h3>🛡️ 伤害结算优先级</h3>
       <p>1. 🫥 刺客隐身 → 完全免疫所有伤害</p>
       <p>2. 🗡️ 真实伤害 → 跳过护盾直接扣血</p>
@@ -771,7 +772,7 @@ function showRules(){
     <div class="section"><h3>🐺 兽人变身机制</h3>
       <p>• 🐻 熊：🐾 触发恢复 1 点生命，形态永久保持</p>
       <p>• 🐺 狼：🐾 触发对左右邻位各 1 点普通伤害，形态永久保持</p>
-      <p>• 🐯 虎：🐾 触发全体敌人 3 点真实伤害，回合结束变回人</p>
+      <p>• 🐯 虎：🐾 触发全体敌人 2 点真实伤害，回合结束变回人</p>
       <p>• 人：🐾 触发无效</p></div>
     <div class="section"><h3>⚡ 闪电</h3><p>每张 ⚡ 提供 1 次额外出牌次数。弃掉连锁则出牌权归零。</p></div>
     <div class="section"><h3>⏱️ 超时</h3>
@@ -1188,6 +1189,19 @@ function handleServerMessage(msg){
       document.getElementById('game-room-code').textContent = myRoomCode;
       break;
 
+    case 'ROOM_DISMISSED':
+      alert(payload.msg || '房间已解散');
+      myPlayerId = null;
+      myRoomCode = null;
+      mySeatIndex = -1;
+      gameState = null;
+      myHand = [];
+      prevHand = [];
+      prevPlayerSnapshot = {};
+      document.getElementById('my-room-info').style.display = 'none';
+      showScreen('lobby-screen');
+      break;
+
     case 'PONG':
       break;
   }
@@ -1337,6 +1351,18 @@ function flushFloatDiffs() {
   }
 }
 
+// Buff 图标悬浮提示
+const BUFF_TOOLTIPS = {
+  '🩸':'血怒：本回合打出的攻击牌额外+1伤害（每张牌+1）',
+  '⛈️':'雷暴诅咒：每回合受1点真实伤害',
+  '🙏':'祈祷：每出2张牌自动抽1张',
+  '🫥':'隐身：完全免疫所有伤害',
+};
+function renderBuffs(buffs){
+  if(!buffs||buffs.length===0) return '';
+  return buffs.map(b=>`<span title="${BUFF_TOOLTIPS[b]||''}" style="cursor:help;font-size:18px">${b}</span>`).join(' ');
+}
+
 function renderBoard(players, currentPlayerId){
   const board = document.getElementById('board');
   const me = players.find(p=>p.id===myPlayerId);
@@ -1384,15 +1410,15 @@ function renderPlayerCard(p, currentPlayerId){
          data-seat="${p.seatIndex}">
       <div style="display:flex;align-items:center">
         <span class="char-icon">${charInfo.emoji||'❓'}</span>
-        <span class="name">${p.character||'未选择'} ${isMe?'(我)':''}</span>
+        <span class="name">${p.character||'未选择'}${p.nickname?' ('+p.nickname+')':''} ${isMe?'(我)':''}</span>
       </div>
       <div class="hp-bar"><div class="hp-fill" style="width:${hpPct}%;background:${hpColor}"></div></div>
       <div style="font-size:11px">❤️ ${p.hp}/${p.maxHp} | 🛡️ ${p.shield||0} | 🔰 ${p.greenShield||0}</div>
       <div style="font-size:10px;color:var(--text-dim);margin-top:2px">🎴${p.handCount!=null?p.handCount:'?'} 📚${p.deckCount!=null?p.deckCount:'?'} 🗑️${p.discardCount!=null?p.discardCount:'?'}</div>
-      <div class="buffs">${(p.buffs||[]).join(' ')}</div>
+      <div class="buffs">${renderBuffs(p.buffs)}</div>
       ${p.beastForm?`<div class="beast-badge" style="background:${color}33;color:${color};font-weight:bold;font-size:13px;margin-top:4px;display:flex;align-items:center;gap:4px">
         ${p.beastForm==='bear'?'🐻 熊形态':p.beastForm==='wolf'?'🐺 狼形态 '+(p.wolfBuff?'⚡+1伤害':'') :'🐯 虎形态'}
-        <span style="font-size:10px;opacity:0.7">| ${p.beastForm==='bear'?'🐾触发回1血':p.beastForm==='wolf'?'🐾触发左右各1伤':'🐾触发全场3真伤·回合结束变回人'}</span>
+        <span style="font-size:10px;opacity:0.7">| ${p.beastForm==='bear'?'🐾触发回1血':p.beastForm==='wolf'?'🐾触发左右各1伤':'🐾触发全场2真伤·回合结束变回人'}</span>
       </div>`:''}
       ${!p.connected?'<div style="color:#a83232;font-size:11px">⚠️ 断线</div>':''}
       ${isDead?'<div style="color:#a83232;font-size:12px">💀 阵亡</div>':''}
@@ -1767,11 +1793,11 @@ const BASE_ICONS = {
   '⚡':  '闪电：额外获得 1 次出牌机会',
 };
 const CHAR_SKILL_ICONS = {
-  '战士': [['🩸','血怒：回合结束时对所有敌人造成 1 点伤害']],
+  '战士': [['🩸','血怒：本回合打出的攻击牌额外+1伤害（每张牌+1），回合结束移除']],
   '牧师': [['💕','生命祝福：永久提升血量上限 +1'],['♻️','生命交换：与一名玩家互换当前血量']],
   '法师': [['⛈️','雷暴诅咒：目标每回合受 1 点真实伤害，持续至法师下回合'],['🙏','祈祷：每打出 2 张牌自动抽 1 张']],
   '坦克': [['💥','破盾波：清除全场敌人的所有普通护盾'],['🔰','荆棘装甲：获得反伤绿盾，受伤时反弹 1 点真实伤害']],
-  '兽人': [['🐾','野兽本能：触发当前形态的被动效果'],['🐻','熊形态：🐾触发时恢复1点生命'],['🐺','狼形态：🐾触发时对左右邻位各造成1点伤害'],['🐯','虎形态：🐾触发时对所有敌人造成3点真实伤害（无视护盾），回合结束变回人']],
+  '兽人': [['🐾','野兽本能：触发当前形态的被动效果'],['🐻','熊形态：🐾触发时恢复1点生命'],['🐺','狼形态：🐾触发时对左右邻位各造成1点伤害'],['🐯','虎形态：🐾触发时对所有敌人造成2点真实伤害（无视护盾），回合结束变回人']],
   '刺客': [['👀','窥视：查看对手手牌，偷 1 张并还 1 张'],['🫥','相位偏移：隐身一回合，完全免疫所有伤害']],
 };
 function updateIconLegend(){

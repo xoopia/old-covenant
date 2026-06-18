@@ -52,23 +52,21 @@ function drawCards(state, playerId, count = 1) {
       if (player.discardPile.length === 0) {
         // 牌库和弃牌堆都为空 → 受到 1 点真实伤害
         const { dealDamage } = require("./gameEngine");
-        const newState = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
-        s.players = newState.players;
+        s = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
         const refreshed = s.players.find(p => p.id === playerId);
         if (refreshed) {
           s.gameLogs = s.gameLogs || [];
-          s.gameLogs.push(`📭 ${refreshed.character || playerId} 牌库耗尽，受到 1 点真实伤害`);
+          s.gameLogs.push(`📭 ${refreshed.nickname || refreshed.character || playerId} 牌库耗尽，受到 1 点真实伤害`);
         }
         break;
       }
       // 弃牌堆洗入牌库 → 受到 1 点真实伤害，再洗入
       const { dealDamage } = require("./gameEngine");
-      const dmgState = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
-      s.players = dmgState.players;
+      s = dealDamage(s, "SYSTEM", playerId, 1, true, 0);
       player = s.players.find(pl => pl.id === playerId); // 刷新引用
       if (player) {
         s.gameLogs = s.gameLogs || [];
-        s.gameLogs.push(`🔄 ${player.character || playerId} 弃牌堆洗入牌库，受到 1 点真实伤害`);
+        s.gameLogs.push(`🔄 ${player.nickname || player.character || playerId} 弃牌堆洗入牌库，受到 1 点真实伤害`);
         player.deck = shuffle(player.discardPile);
         player.discardPile = [];
       }

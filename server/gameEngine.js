@@ -74,6 +74,15 @@ function dealDamage(state, sourceId, targetId, damage, isTrueDamage = false, dep
   // 真实伤害 → 跳过护盾，直接扣血
   if (isTrueDamage) {
     target.hp = Math.max(0, target.hp - damage);
+    // 血量归零 → 立即标记死亡
+    if (target.hp <= 0) {
+      target.isAlive = false;
+      target.buffs = [];
+      target.beastForm = null;
+      target.wolfBuff = false;
+      s.gameLogs = s.gameLogs || [];
+      s.gameLogs.push("💀 " + (target.nickname || target.character || targetId) + " 阵亡！");
+    }
     return s;
   }
 
@@ -99,6 +108,15 @@ function dealDamage(state, sourceId, targetId, damage, isTrueDamage = false, dep
 
   // ❤️ 扣血
   target.hp = Math.max(0, target.hp - damage);
+  // 血量归零 → 立即标记死亡
+  if (target.hp <= 0) {
+    target.isAlive = false;
+    target.buffs = [];
+    target.beastForm = null;
+    target.wolfBuff = false;
+    s.gameLogs = s.gameLogs || [];
+    s.gameLogs.push("💀 " + (target.nickname || target.character || targetId) + " 阵亡！");
+  }
   return s;
 }
 
@@ -340,17 +358,17 @@ function triggerBeastFormPassive(state, playerId) {
           if (leftIdx !== myIdx) targets.push(alivePlayers[leftIdx].id);
           if (rightIdx !== myIdx && rightIdx !== leftIdx) targets.push(alivePlayers[rightIdx].id);
           for (const tid of targets) {
-            s.players = dealDamage(s, playerId, tid, 1, false, 0).players;
+            s = dealDamage(s, playerId, tid, 1, false, 0);
           }
         }
       }
       break;
     case "tiger":
-      // 虎形态被动：对所有敌人造成3点无视护盾的真实伤害
+      // 虎形态被动：对所有敌人造成2点无视护盾的真实伤害
       {
         const enemies = s.players.filter((p) => p.id !== playerId && p.isAlive);
         for (const enemy of enemies) {
-          s.players = dealDamage(s, playerId, enemy.id, 3, true, 0).players;
+          s = dealDamage(s, playerId, enemy.id, 2, true, 0);
         }
       }
       break;
@@ -412,6 +430,21 @@ function applySingleCard(state, action) {
     if (EffectHandlers[effect]) {
       const targetForThisEffect = getTargetForEffect(action.targets, effect, i);
       tempState = EffectHandlers[effect](tempState, action.sourceId, targetForThisEffect);
+    }
+  }
+
+  // 🩸 血怒加成：整张攻击牌额外+1真实伤害（每张牌+1，非每个图标+1）
+  const hasAttack = card.effects.some(e => e === '🗡️');
+  const bp = tempState.players.find(p => p.id === action.sourceId);
+  if (hasAttack && bp && bp.buffs.includes('🩸') && bp.isAlive) {
+    const tgtList = action.targets || [];
+    const tgtPlayer = tgtList.length > 0
+      ? tempState.players.find(p => p.seatIndex === tgtList[0] && p.isAlive)
+      : tempState.players.find(p => p.id !== action.sourceId && p.isAlive);
+    if (tgtPlayer) {
+      tempState = dealDamage(tempState, action.sourceId, tgtPlayer.id, 1, true, 0);
+      tempState.gameLogs = tempState.gameLogs || [];
+      tempState.gameLogs.push('🩸 血怒：攻击牌额外+1伤害');
     }
   }
 
@@ -569,6 +602,7 @@ function createInitialGameState(roomId, players) {
     return {
       id: p.id,
       seatIndex: p.seatIndex,
+      nickname: p.nickname || "Player",
       character: p.character,
       hp: charInfo.maxHp,
       maxHp: charInfo.maxHp,

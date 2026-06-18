@@ -66,6 +66,13 @@ class Room {
     if (this.players.length >= this.maxPlayers) return { error: "ROOM_FULL" };
     if (this.phase !== "WAITING") return { error: "ROOM_ALREADY_STARTED" };
 
+    // 检查该连接是否已在房间中（防止重复加入产生幽灵玩家）
+    const existing = this.players.find(p => p.ws === ws);
+    if (existing) {
+      existing.nickname = nickname || existing.nickname; // 更新昵称
+      return { success: true, player: existing, alreadyJoined: true };
+    }
+
     const { generatePlayerId } = require("./util");
     const player = {
       id: generatePlayerId(),
@@ -104,10 +111,24 @@ class Room {
     const player = this.getPlayer(playerId);
     if (!player) return;
     player.connected = false;
+
+    // 房主在游戏开始前退出 → 房间自动解散
+    if (player.seatIndex === this.hostSeatIndex && (this.phase === "WAITING" || this.phase === "ROLLING" || this.phase === "PICKING")) {
+      const { roomManager } = require("./roomManager");
+      // 通知其他玩家房间解散
+      for (const p of this.players) {
+        if (p.ws && p.connected && p.id !== playerId) {
+          try { require("./messageHandler").send(p.ws, "ROOM_DISMISSED", { msg: "房主已退出，房间解散" }); } catch (_) {}
+        }
+      }
+      roomManager.destroyRoom(this.code);
+      return;
+    }
+
     // 如果在对局中，标记但不立即移除
     if (this.phase === "PLAYING" || this.phase === "PICKING") {
       // 90秒后自动托管
-      this.timers[`disconnect_${playerId}`] = setTimeout(() => {
+      this.timers["disconnect_" + playerId] = setTimeout(() => {
         this.handleAbandon(playerId);
       }, TIMEOUTS.DISCONNECT);
     } else {
@@ -122,9 +143,9 @@ class Room {
     player.connected = true;
     this.heartbeatMisses[playerId] = 0;
     // 清除断线托管定时器
-    if (this.timers[`disconnect_${playerId}`]) {
-      clearTimeout(this.timers[`disconnect_${playerId}`]);
-      delete this.timers[`disconnect_${playerId}`];
+    if (this.timers["disconnect_" + playerId]) {
+      clearTimeout(this.timers["disconnect_" + playerId]);
+      delete this.timers["disconnect_" + playerId];
     }
     return { success: true, player };
   }
@@ -311,14 +332,14 @@ class Room {
       // 连锁出牌
       this.gameState = resolveChain(gs, playerId, cardId, resolvedTargets);
       this.gameState.gameLogs.push(
-        `⚡ ${player.character} ${formatCardPlayLog(cardId, this.gameState, resolvedTargets)}`
+        "⚡ " + player.character + " " + formatCardPlayLog(cardId, this.gameState, resolvedTargets)
       );
       isChainCard = true;
     } else {
       // 正常出牌
       this.gameState = resolve(gs, playerId, cardId, resolvedTargets);
       this.gameState.gameLogs.push(
-        `🎴 ${player.character} ${formatCardPlayLog(cardId, this.gameState, resolvedTargets)}`
+        "🎴 " + player.character + " " + formatCardPlayLog(cardId, this.gameState, resolvedTargets)
       );
     }
 
@@ -373,7 +394,7 @@ class Room {
 
     // 执行偷取
     this.gameState = resolveStealPick(gs, cardId);
-    this.gameState.gameLogs.push(`👀 窥视：偷取 1 张牌，等待选牌归还`);
+    this.gameState.gameLogs.push("👀 窥视：偷取 1 张牌，等待选牌归还");
     return { success: true, phase: "gift" };
   }
 
@@ -390,7 +411,7 @@ class Room {
 
     // 执行回赠
     this.gameState = resolveGiftPick(gs, cardId);
-    this.gameState.gameLogs.push(`👀 窥视完成：交还 1 张牌`);
+    this.gameState.gameLogs.push("👀 窥视完成：交还 1 张牌");
 
     // 检查胜利条件
     const result = checkWinCondition(this.gameState);
@@ -445,7 +466,7 @@ class Room {
         // Buff回合开始处理
         this.gameState = onTurnStart(this.gameState, nextPlayer.id);
         this.gameState.gameLogs.push(
-          `🔄 轮到 ${nextPlayer.character} (座位${nextPlayer.seatIndex})`
+          "🔄 轮到 " + (nextPlayer.nickname || nextPlayer.character) + " (" + nextPlayer.character + " 座位" + nextPlayer.seatIndex + ")"
         );
       }
     }
@@ -474,7 +495,7 @@ class Room {
       const enemies = this.gameState.players.filter(p => p.id !== playerId && p.isAlive);
       const target = enemies.length > 0 ? [enemies[0].seatIndex] : [];
       const autoTargets = enemies.length > 0 ? [enemies[0].id] : [];
-      this.gameState.gameLogs.push(`⏩ 自动 ${formatCardPlayLog(cardId, this.gameState, autoTargets)}`);
+      this.gameState.gameLogs.push("⏩ 自动 " + formatCardPlayLog(cardId, this.gameState, autoTargets));
       const playRes = this.playCard(playerId, cardId, target);
       if (!playRes.success) return playRes;
       // 出牌触发了连锁 → 不自动过牌，等玩家操作
@@ -519,7 +540,7 @@ class Room {
       this.gameState.phase = "GAME_OVER";
       this.gameState.gameLogs.push(
         winner
-          ? `🏆 ${winner.nickname || winner.character} 获胜！`
+          ? "🏆 " + (winner.nickname || winner.character) + " 获胜！"
           : "🤝 平局！"
       );
     }
@@ -556,6 +577,7 @@ class Room {
       players: this.gameState.players.map((p) => ({
         id: p.id,
         seatIndex: p.seatIndex,
+        nickname: p.nickname || "",
         character: p.character,
         hp: p.hp,
         maxHp: p.maxHp,
