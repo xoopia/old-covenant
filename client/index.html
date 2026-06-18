@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>旧日圣契</title>
+<link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
 <style>
 /* ====== 全局重置 ====== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -33,7 +34,13 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
   background:radial-gradient(ellipse at center, #f5e6c8 0%, #e2cf9f 100%);
   flex-direction:column;gap:30px;
 }
-.menu-title{font-size:52px;font-weight:bold;color:var(--gold);text-align:center}
+.menu-title{
+  font-family:'ZCOOL XiaoWei','SimSun','STSong',serif;
+  font-size:72px;font-weight:normal;letter-spacing:12px;
+  color:#ffd700;
+  text-shadow:0 2px 4px rgba(80,45,20,0.6),0 0 30px rgba(255,215,0,0.35),0 0 60px rgba(255,215,0,0.15);
+  text-align:center;
+}
 .menu-subtitle{font-size:16px;color:var(--text-dim);text-align:center;margin-top:-20px}
 .menu-buttons{display:flex;flex-direction:column;gap:14px;min-width:320px}
 .menu-btn{
@@ -56,7 +63,12 @@ body.fullscreen-active .screen.active{max-width:none;max-height:none}
   background:var(--panel);border-radius:16px;padding:40px;min-width:480px;
   box-shadow:0 0 60px rgba(80,45,20,0.15);
 }
-.lobby-panel h2{text-align:center;font-size:28px;margin-bottom:24px}
+.lobby-panel h2{
+  text-align:center;font-size:42px;margin-bottom:24px;
+  font-family:'ZCOOL XiaoWei','SimSun','STSong',serif;
+  letter-spacing:8px;color:#ffd700;
+  text-shadow:0 2px 4px rgba(80,45,20,0.6),0 0 20px rgba(255,215,0,0.3);
+}
 .lobby-panel input{
   width:100%;padding:14px 18px;margin:8px 0;border-radius:10px;
   border:2px solid var(--border-soft);background:#f8f0dc;color:var(--text);font-size:16px;
