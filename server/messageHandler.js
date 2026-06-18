@@ -11,21 +11,10 @@
  */
 
 const { roomManager, TIMEOUTS } = require("./roomManager");
-const { makeError } = require("./util");
+const { makeError, sendToPlayer } = require("./util");
 
-/**
- * 发送消息给单个客户端
- */
-function send(ws, type, payload = {}) {
-  if (ws.readyState !== 1 /* WebSocket.OPEN */) return;
-  ws.send(
-    JSON.stringify({
-      type,
-      timestamp: Date.now(),
-      payload,
-    })
-  );
-}
+// 直接引用，语义化别名
+const send = sendToPlayer;
 
 /**
  * 广播消息给房间内所有已连接客户端

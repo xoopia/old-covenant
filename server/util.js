@@ -95,6 +95,16 @@ function shuffle(arr) {
   return a;
 }
 
+/**
+ * 发送消息给单个客户端（WebSocket安全包装）
+ */
+function sendToPlayer(ws, type, payload = {}) {
+  if (ws.readyState !== 1 /* WebSocket.OPEN */) return;
+  try {
+    ws.send(JSON.stringify({ type, timestamp: Date.now(), payload }));
+  } catch (_) { /* ignore send errors */ }
+}
+
 module.exports = {
   ERROR_CODES,
   makeError,
@@ -102,4 +112,5 @@ module.exports = {
   generateRoomCode,
   generatePlayerId,
   shuffle,
+  sendToPlayer,
 };
