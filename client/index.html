@@ -569,6 +569,7 @@ let myHand = [];           // 私有手牌
 let selectedCardIdx = -1;  // 当前选中的手牌下标
 let selectedTargets = [];  // 当前选中的目标
 let isMyTurn = false;
+let wasMyChain = false;
 let countdownTimer = null;
 let countdownValue = 60;
 let pickCountdownTimer = null;
@@ -626,7 +627,7 @@ const CHARACTERS = {
     title:"神圣牧师",
     desc:"团队续航核心，治疗、增益、血量交换，扭转战局的关键角色。",
     skills:["💕 生命祝福：永久提升血量上限+1","♻️ 生命交换：与一名玩家互换当前血量"],
-    cards:"代表卡牌：惩戒🗡️🗡️ / 灵感🃏🃏🃏 / 圣光壁垒🗡️❤️🃏 / 神圣新星❤️❤️❤️⚡ / 生命交换♻️"
+    cards:"代表卡牌：惩戒🗡️🗡️ / 战意🗡️🃏🃏 / 圣光壁垒🗡️❤️🃏 / 神圣新星❤️❤️❤️⚡ / 生命交换♻️"
   },
   "法师":{
     maxHp:10, color:"#3a6fa8", emoji:"🧙",
@@ -1179,6 +1180,7 @@ function handleServerMessage(msg){
       stopPickCountdown();
       showScreen('game-screen');
       prevPlayerSnapshot = {};  // 重置浮动数字快照
+      wasMyChain = false;       // 重置连锁状态
       // 延迟一帧确保 screen 已 visible，再 resize canvas
       setTimeout(() => { if (typeof fxResize === 'function') fxResize(); }, 50);
       document.getElementById('game-room-code').textContent = myRoomCode;
@@ -1286,8 +1288,9 @@ function updateGameUI(){
 
   // 回合切换音效
   if(isMyTurn && !wasMyTurn) sfxTurnStart();
-  // 连锁提示音
-  if(isMyChain && !gameState?.awaitingChain) sfxChain();
+  // 连锁提示音 - 状态刚进入连锁时播放一次
+  if(isMyChain && !wasMyChain) sfxChain();
+  wasMyChain = isMyChain;
 
   // 同步服务端下发的剩余出牌次数
   if(isMyTurn || isMyChain){

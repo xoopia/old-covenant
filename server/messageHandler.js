@@ -308,11 +308,18 @@ function resetPlayTimeout(room) {
   }
   room.timers["playTimeout"] = setTimeout(() => {
     if (room.phase === "PLAYING") {
-      room.handleTimeout("PLAY_CARD");
-      // 广播超时自动结束回合
-      broadcast(room, "TIMEOUT", { action: "PLAY_CARD" });
-      syncState(room);
-      resetPlayTimeout(room);
+      // 连锁中 → 直接跳过连锁再推进回合
+      if (room.gameState && room.gameState.awaitingChain) {
+        room.handleTimeout("CHAIN");
+        broadcast(room, "TIMEOUT", { action: "CHAIN" });
+        syncState(room);
+        resetPlayTimeout(room);
+      } else {
+        room.handleTimeout("PLAY_CARD");
+        broadcast(room, "TIMEOUT", { action: "PLAY_CARD" });
+        syncState(room);
+        resetPlayTimeout(room);
+      }
     }
   }, TIMEOUTS.PLAY_CARD);
 }

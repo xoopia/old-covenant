@@ -476,6 +476,20 @@ class Room {
       if (!playRes.success) return playRes;
       // 触发了连锁/换牌 → 不强行推进，等客户端操作
       if (this.gameState.awaitingChain || this.gameState._pendingStealPick || this.gameState._pendingGiftPick) {
+        // 自动出牌触发连锁 → 设置连锁超时（15s后跳过链+推进回合）
+        if (this.gameState.awaitingChain) {
+          if (this.timers["chainTimeout"]) clearTimeout(this.timers["chainTimeout"]);
+          this.timers["chainTimeout"] = setTimeout(() => {
+            if (this.phase === "PLAYING" && this.gameState && this.gameState.awaitingChain) {
+              this.gameState = skipChain(this.gameState);
+              this.gameState.gameLogs.push("⏰ 连锁超时，自动终止");
+              // 跳过链后立刻推进回合
+              const curId = this.gameState.turnOrder[this.gameState.currentPlayerIndex];
+              this._advanceTurn(curId);
+              this._broadcastState();
+            }
+          }, TIMEOUTS.CHAIN);
+        }
         return { success: true, awaitingChain: this.gameState.awaitingChain };
       }
     }
@@ -495,7 +509,7 @@ class Room {
       return { success: true, gameOver: true, winner: result.winner };
     }
 
-    const currentPlayer = gs.players.find(p => p.id === currentPlayerId);
+    const currentPlayer = this.gameState.players.find(p => p.id === currentPlayerId);
     if (currentPlayer) {
       const nextPlayer = getNextAlivePlayer(this.gameState, currentPlayer.seatIndex);
       if (nextPlayer) {
